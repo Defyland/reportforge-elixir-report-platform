@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Defyland/reportforge-elixir-report-platform/docs/events/report_progress_updated.v1.json",
+  "title": "report.progress_updated v1",
+  "type": "object",
+  "required": ["event_id", "event_type", "schema_version", "occurred_at", "producer", "organization_id", "report_id", "correlation_id", "payload"],
+  "properties": {
+    "event_id": { "type": "string" },
+    "event_type": { "type": "string", "const": "report.progress_updated" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "producer": { "type": "string", "const": "reportforge" },
+    "organization_id": { "type": "string" },
+    "report_id": { "type": "string" },
+    "correlation_id": { "type": "string" },
+    "payload": {
+      "type": "object",
+      "required": ["stage", "rows_processed"],
+      "properties": {
+        "stage": { "type": "string" },
+        "rows_processed": { "type": "integer", "minimum": 0 },
+        "total_rows_estimate": { "type": ["integer", "null"], "minimum": 0 }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

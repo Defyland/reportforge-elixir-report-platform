@@ -1,5 +1,10 @@
 # Threat Model
 
+This architecture-level model summarizes system risks. The focused financial
+export model lives in [docs/security/threat-model.md](../security/threat-model.md)
+and covers signed URLs, retention, tenant access, and object storage in more
+detail.
+
 ## Primary assets
 
 - tenant API keys
@@ -61,12 +66,34 @@ Risk:
 Current mitigations:
 
 - signed URLs
+- tokens include report and organization context
 - explicit expiration timestamps
 - recurring cleanup of expired artifacts
+- object storage keys are not treated as public identifiers
 
 Remaining work:
 
-- object storage with short-lived signed URLs
+- managed signing-secret rotation
+- sensitivity-based download TTLs
+- bucket lifecycle policy in the target cloud provider
+
+## Retention failure
+
+Risk:
+
+- financial exports outlive tenant policy or legal retention requirements
+
+Current mitigations:
+
+- report artifacts have explicit expiration timestamps
+- cleanup workers delete expired metadata and storage objects
+- artifact exposure runbook documents emergency response
+
+Remaining work:
+
+- cloud object lifecycle enforcement
+- backup and restore drills for retention-sensitive data
+- legal hold rules if required by the deployment context
 
 ## Upstream and storage failure
 
@@ -85,3 +112,20 @@ Remaining work:
 
 - DLQ or retry semantics if a broker is introduced
 - recovery runbooks for dependency outages
+
+## Event data leakage
+
+Risk:
+
+- lifecycle events accidentally include report row contents, credentials, signed
+  URLs, or other financial data
+
+Current mitigations:
+
+- event docs restrict payloads to lifecycle metadata
+- signed URLs are explicitly excluded from durable event facts
+- correlation and trace IDs support debugging without exposing report contents
+
+Remaining work:
+
+- schema validation for future event publishers

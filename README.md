@@ -57,7 +57,7 @@ The current implementation is a lightweight Elixir service built with Bandit and
 - `ReportForge.Oban` schedules durable report jobs backed by PostgreSQL
 - `ReportForge.Telemetry` emits domain/runtime events consumed by `ReportForge.Metrics`
 
-Architecture detail lives in [docs/architecture/overview.md](./docs/architecture/overview.md) and [docs/diagrams/system-context.md](./docs/diagrams/system-context.md).
+Architecture detail lives in [docs/architecture/overview.md](./docs/architecture/overview.md), [docs/architecture/large-report-pipeline.md](./docs/architecture/large-report-pipeline.md), and [docs/diagrams/system-context.md](./docs/diagrams/system-context.md).
 
 ## Tech stack
 
@@ -121,7 +121,7 @@ ReportForge treats report generation as an explicit asynchronous workflow:
 4. The report transitions to `succeeded`, `failed`, or `cancelled`.
 5. Successful runs issue a signed artifact URL with expiry metadata.
 
-The lifecycle sequence is documented in [docs/diagrams/report-lifecycle-sequence.md](./docs/diagrams/report-lifecycle-sequence.md).
+The lifecycle sequence is documented in [docs/diagrams/report-lifecycle-sequence.md](./docs/diagrams/report-lifecycle-sequence.md), the large-report pipeline constraints are documented in [docs/architecture/large-report-pipeline.md](./docs/architecture/large-report-pipeline.md), and versioned lifecycle event expectations are documented in [docs/events/README.md](./docs/events/README.md). The event docs define the future stream-first contract but do not implement new exporters.
 
 ## Database design
 
@@ -198,7 +198,9 @@ Current observability notes:
 Security detail:
 
 - [docs/architecture/threat-model.md](./docs/architecture/threat-model.md)
+- [docs/security/threat-model.md](./docs/security/threat-model.md)
 - [docs/api/authorization-matrix.md](./docs/api/authorization-matrix.md)
+- [docs/runbooks/report-artifact-exposure.md](./docs/runbooks/report-artifact-exposure.md)
 
 ## Trade-offs and decisions
 
@@ -214,6 +216,7 @@ The main decisions are recorded in:
 - [docs/adr/0003-task-supervisor-before-oban.md](./docs/adr/0003-task-supervisor-before-oban.md)
 - [docs/adr/0004-adopt-oban-for-durable-execution.md](./docs/adr/0004-adopt-oban-for-durable-execution.md)
 - [docs/adr/0005-artifact-storage-boundary-and-retry-policy.md](./docs/adr/0005-artifact-storage-boundary-and-retry-policy.md)
+- [docs/adr/0006-stream-first-before-platform-complexity.md](./docs/adr/0006-stream-first-before-platform-complexity.md)
 
 ## How to run locally
 

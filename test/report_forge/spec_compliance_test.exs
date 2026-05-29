@@ -13,9 +13,14 @@ defmodule ReportForge.SpecComplianceTest do
     "docs/api/authorization-matrix.md",
     "docs/architecture/observability.md",
     "docs/architecture/threat-model.md",
+    "docs/architecture/large-report-pipeline.md",
+    "docs/adr/0006-stream-first-before-platform-complexity.md",
+    "docs/events/README.md",
+    "docs/security/threat-model.md",
     "docs/architecture/grafana-dashboard.json",
     "docs/benchmarks/methodology.md",
-    "docs/runbooks/common-issues.md"
+    "docs/runbooks/common-issues.md",
+    "docs/runbooks/report-artifact-exposure.md"
   ]
 
   @required_dirs [
@@ -24,7 +29,9 @@ defmodule ReportForge.SpecComplianceTest do
     "docs/architecture",
     "docs/benchmarks",
     "docs/diagrams",
+    "docs/events",
     "docs/runbooks",
+    "docs/security",
     "benchmarks/results"
   ]
 
@@ -100,6 +107,16 @@ defmodule ReportForge.SpecComplianceTest do
     "signed URLs",
     "tenant-scoped",
     "audit"
+  ]
+
+  @required_report_events [
+    "requested",
+    "started",
+    "progress_updated",
+    "uploaded",
+    "completed",
+    "failed",
+    "cancelled"
   ]
 
   test "repository keeps the mandatory structure and populated README sections" do
@@ -184,6 +201,7 @@ defmodule ReportForge.SpecComplianceTest do
   test "security and observability docs cover the baseline controls" do
     observability = read_repo!("docs/architecture/observability.md")
     threat_model = read_repo!("docs/architecture/threat-model.md")
+    financial_threat_model = read_repo!("docs/security/threat-model.md")
     auth_matrix = read_repo!("docs/api/authorization-matrix.md")
     not_found_normalization = "Cross-tenant report reads are intentionally normalized to `404`"
 
@@ -197,10 +215,36 @@ defmodule ReportForge.SpecComplianceTest do
              "threat model must mention #{term}"
     end)
 
+    Enum.each(["financial exports", "signed URLs", "tenant", "retention", "storage"], fn term ->
+      assert String.contains?(financial_threat_model, term),
+             "financial threat model must mention #{term}"
+    end)
+
     assert String.contains?(auth_matrix, "| Endpoint | Auth mode | Scope rule |")
     assert String.contains?(auth_matrix, "`POST /api/v1/reports`")
     assert String.contains?(auth_matrix, "`GET /downloads/{token}`")
     assert String.contains?(auth_matrix, not_found_normalization)
+  end
+
+  test "large report pipeline docs cover lifecycle events and deferred platform scope" do
+    pipeline = read_repo!("docs/architecture/large-report-pipeline.md")
+    events = read_repo!("docs/events/README.md")
+    adr = read_repo!("docs/adr/0006-stream-first-before-platform-complexity.md")
+
+    Enum.each(["stream-first", "bounded", "ArtifactStorage", "No new exporters"], fn term ->
+      assert String.contains?(pipeline <> adr, term),
+             "large report docs must mention #{term}"
+    end)
+
+    Enum.each(@required_report_events, fn event ->
+      assert String.contains?(events, event),
+             "event docs must mention #{event}"
+    end)
+
+    Enum.each(["Kubernetes", "data lake", "deferred"], fn term ->
+      assert String.contains?(adr, term),
+             "ADR 0006 must explain why #{term} is deferred"
+    end)
   end
 
   defp latest_benchmark_results_readme! do
