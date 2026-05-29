@@ -6,6 +6,7 @@ defmodule ReportForgeWeb.Router do
   alias ReportForge.Identity
   alias ReportForge.Metrics
   alias ReportForge.RateLimiter
+  alias ReportForge.Readiness
   alias ReportForge.Reports
   alias ReportForgeWeb.{Auth, Payloads, RequestContext, Responses}
 
@@ -23,13 +24,13 @@ defmodule ReportForgeWeb.Router do
   end
 
   get "/readyz" do
-    Responses.json(conn, 200, %{
-      status: "ready",
-      checks: %{
-        store: "up",
-        oban: "up",
-        signer: "up"
-      },
+    readiness = Readiness.status()
+    http_status = if(readiness.ready?, do: 200, else: 503)
+
+    Responses.json(conn, http_status, %{
+      status: readiness.status,
+      service: "reportforge-api",
+      checks: readiness.checks,
       timestamp: Responses.meta(conn).timestamp
     })
   end
@@ -205,8 +206,10 @@ defmodule ReportForgeWeb.Router do
     case Reports.download_artifact(token) do
       {:ok, artifact} ->
         conn
+        |> put_resp_header("content-type", artifact.content_type)
         |> put_resp_header("content-disposition", "attachment; filename=\"#{artifact.filename}\"")
         |> put_resp_header("cache-control", "private, max-age=60")
+        |> put_resp_header("x-content-type-options", "nosniff")
         |> send_resp(200, artifact.body)
 
       {:error, reason} ->

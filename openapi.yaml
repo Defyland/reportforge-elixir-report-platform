@@ -525,6 +525,8 @@ components:
       properties:
         status:
           type: string
+        service:
+          type: string
         checks:
           type: object
           additionalProperties:

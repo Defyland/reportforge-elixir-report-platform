@@ -5,6 +5,7 @@
 Checks:
 
 - call `GET /readyz`
+- confirm the readiness payload reports `database`, `oban`, and `signer` as `up`
 - inspect `/metrics` for `reportforge_inflight_reports`
 - verify the process has not restarted since report creation
 
@@ -64,6 +65,7 @@ Action:
 Checks:
 
 - verify `GET /readyz` is healthy
+- confirm `database`, `oban`, and `signer` checks are all `up`
 - inspect `/metrics` and the logs for `maintenance_cleanup_completed`
 - confirm the `maintenance` Oban queue is enabled and draining
 
@@ -96,6 +98,7 @@ Action:
 Checks:
 
 - call `GET /readyz`
+- if the endpoint returns `503`, inspect the `database` check before retrying application traffic
 - inspect request errors and Oban worker failures around the same timestamp
 - confirm the PostgreSQL instance is reachable from the application host
 

@@ -9,7 +9,7 @@
 - structured JSON log payloads are emitted through [lib/report_forge/observability.ex](../../lib/report_forge/observability.ex)
 - OTLP exporter wiring is configured through `:opentelemetry` and `:opentelemetry_exporter`
 - Prometheus-style metrics are exposed by [lib/report_forge/metrics.ex](../../lib/report_forge/metrics.ex)
-- explicit health check and readiness check endpoints exist in [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex)
+- explicit health check and readiness check endpoints exist in [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex), and readiness now validates PostgreSQL reachability, Oban availability, and signing-secret presence
 
 ## Current metric families
 

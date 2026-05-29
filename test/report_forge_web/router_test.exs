@@ -1,6 +1,12 @@
 defmodule ReportForgeWeb.RouterTest do
   use ReportForge.Case, async: false
 
+  defmodule NotReadyChecker do
+    def database_status, do: {:down, "query_failed"}
+    def oban_status, do: :up
+    def signer_status, do: {:down, "missing_signing_secret"}
+  end
+
   test "rejects authenticated endpoints without an api key" do
     conn =
       json_request(:post, "/api/v1/reports", %{"report" => %{"template_name" => "cash_position"}})
@@ -19,10 +25,32 @@ defmodule ReportForgeWeb.RouterTest do
     assert get_resp_header(health_conn, "traceparent") != []
 
     assert ready_conn.status == 200
+    assert get_in(json_response(ready_conn), ["checks", "database"]) == "up"
     assert get_in(json_response(ready_conn), ["checks", "oban"]) == "up"
+    assert get_in(json_response(ready_conn), ["checks", "signer"]) == "up"
 
     assert metrics_conn.status == 200
     assert metrics_conn.resp_body =~ "reportforge_http_requests_total"
+  end
+
+  test "returns 503 from readiness when a dependency check is down" do
+    original_checker = Application.get_env(:report_forge, :readiness_checker)
+    Application.put_env(:report_forge, :readiness_checker, NotReadyChecker)
+
+    on_exit(fn ->
+      if is_nil(original_checker) do
+        Application.delete_env(:report_forge, :readiness_checker)
+      else
+        Application.put_env(:report_forge, :readiness_checker, original_checker)
+      end
+    end)
+
+    conn = json_request(:get, "/readyz")
+
+    assert conn.status == 503
+    assert get_in(json_response(conn), ["status"]) == "not_ready"
+    assert get_in(json_response(conn), ["checks", "database"]) == "down: query_failed"
+    assert get_in(json_response(conn), ["checks", "signer"]) == "down: missing_signing_secret"
   end
 
   test "creates an organization, creates a report, and exposes report events" do
@@ -135,6 +163,8 @@ defmodule ReportForgeWeb.RouterTest do
     artifact_conn = json_request(:get, path)
     assert artifact_conn.status == 200
     assert artifact_conn.resp_body =~ "as_of_date"
+    assert get_resp_header(artifact_conn, "content-type") == ["text/csv"]
+    assert get_resp_header(artifact_conn, "x-content-type-options") == ["nosniff"]
   end
 
   test "returns validation errors for unsupported report formats" do
