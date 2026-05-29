@@ -9,7 +9,7 @@
 - structured JSON log payloads are emitted through [lib/report_forge/observability.ex](../../lib/report_forge/observability.ex)
 - OTLP exporter wiring is configured through `:opentelemetry` and `:opentelemetry_exporter`
 - Prometheus-style metrics are exposed by [lib/report_forge/metrics.ex](../../lib/report_forge/metrics.ex)
-- liveness and readiness probes exist in [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex)
+- explicit health check and readiness check endpoints exist in [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex)
 
 ## Current metric families
 
@@ -24,7 +24,7 @@
 
 ## Dashboard definition
 
-The initial dashboard definition lives in [grafana-dashboard.json](./grafana-dashboard.json).
+The initial Grafana dashboard definition lives in [grafana-dashboard.json](./grafana-dashboard.json).
 
 ## Trace proof in the current slice
 
