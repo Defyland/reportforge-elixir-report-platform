@@ -1,0 +1,47 @@
+groups:
+  - name: reportforge
+    rules:
+      - alert: ReportForgeTargetDown
+        expr: up{job="reportforge"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: ReportForge Prometheus target is down
+          description: Prometheus cannot scrape the ReportForge API metrics endpoint.
+
+      - alert: ReportForgeHighErrorRate
+        expr: sum(rate(reportforge_http_requests_total{status=~"5.."}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: ReportForge is returning 5xx responses
+          description: At least one 5xx response was observed over the last five minutes.
+
+      - alert: ReportForgeQueueBacklog
+        expr: reportforge_inflight_reports > 25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: ReportForge report backlog is growing
+          description: More than 25 reports have remained queued or running for at least ten minutes.
+
+      - alert: ReportForgeReportFailures
+        expr: sum(rate(reportforge_reports_completed_total{status="failed"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: ReportForge reports are failing
+          description: Failed report completions were observed in the last ten minutes.
+
+      - alert: ReportForgeRetrySpike
+        expr: sum(rate(reportforge_report_retries_total[10m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: ReportForge retry rate is elevated
+          description: Report retries are elevated, commonly caused by upstream or storage instability.

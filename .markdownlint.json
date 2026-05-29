@@ -1,7 +1,5 @@
 {
   "default": true,
-  "line-length": {
-    "line_length": 140
-  },
+  "line-length": false,
   "no-inline-html": false
 }

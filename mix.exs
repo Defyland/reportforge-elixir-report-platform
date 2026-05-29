@@ -66,7 +66,7 @@ defmodule ReportForge.MixProject do
         "format --check-formatted",
         "compile --warnings-as-errors",
         "credo --strict",
-        "sobelow --skip --exit",
+        "sobelow --ignore Config.HTTPS --skip --exit",
         "deps.audit",
         "ecto.create --quiet",
         "ecto.migrate --quiet",

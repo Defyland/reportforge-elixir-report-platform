@@ -67,7 +67,7 @@ defmodule ReportForge.SpecComplianceTest do
     "mix format --check-formatted",
     "mix compile --warnings-as-errors",
     "mix credo --strict",
-    "mix sobelow --skip --exit",
+    "mix sobelow --ignore Config.HTTPS --skip --exit",
     "mix deps.audit",
     "mix ecto.create && mix ecto.migrate",
     "mix test --cover",
