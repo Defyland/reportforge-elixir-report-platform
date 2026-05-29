@@ -9,6 +9,16 @@ config :report_forge,
       "REPORT_FORGE_ARTIFACT_STORAGE_PATH",
       Path.join(System.tmp_dir!(), "report_forge_artifacts_dev")
     ),
+  artifact_storage_s3: [
+    access_key_id: System.get_env("REPORT_FORGE_S3_ACCESS_KEY_ID"),
+    bucket: System.get_env("REPORT_FORGE_S3_BUCKET"),
+    endpoint: System.get_env("REPORT_FORGE_S3_ENDPOINT", "https://s3.amazonaws.com"),
+    force_path_style: System.get_env("REPORT_FORGE_S3_FORCE_PATH_STYLE", "false") == "true",
+    presign_ttl_seconds:
+      String.to_integer(System.get_env("REPORT_FORGE_S3_PRESIGN_TTL_SECONDS", "300")),
+    region: System.get_env("REPORT_FORGE_S3_REGION", "us-east-1"),
+    secret_access_key: System.get_env("REPORT_FORGE_S3_SECRET_ACCESS_KEY")
+  ],
   api_key_header: "x-api-key",
   base_url: "http://localhost:4000",
   report_ttl_seconds: 86_400,

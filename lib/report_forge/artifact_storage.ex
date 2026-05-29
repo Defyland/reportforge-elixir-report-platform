@@ -3,7 +3,7 @@ defmodule ReportForge.ArtifactStorage do
 
   alias ReportForge.Reports.Artifact
 
-  @type artifact_source :: {:file, Path.t()} | {:binary, binary()}
+  @type artifact_source :: {:file, Path.t()} | {:binary, binary()} | {:redirect, String.t()}
 
   @callback put_artifact(map()) ::
               {:ok, Artifact.t()} | {:error, Ecto.Changeset.t() | {String.t(), String.t()}}

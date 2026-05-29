@@ -205,8 +205,7 @@ defmodule ReportForgeWeb.Router do
   get "/downloads/:token" do
     case Reports.download_artifact(token) do
       {:ok, %{artifact: artifact, source: source}} ->
-        conn = put_artifact_headers(conn, artifact)
-        send_artifact(conn, source)
+        send_artifact(conn, artifact, source)
 
       {:error, reason} ->
         Responses.from_reason(conn, reason)
@@ -268,12 +267,21 @@ defmodule ReportForgeWeb.Router do
   end
 
   # sobelow_skip ["Traversal.SendFile"]
-  defp send_artifact(conn, {:file, path}) do
+  defp send_artifact(conn, artifact, {:file, path}) do
+    conn = put_artifact_headers(conn, artifact)
     send_file(conn, 200, path)
   end
 
   # sobelow_skip ["XSS.SendResp"]
-  defp send_artifact(conn, {:binary, body}) do
+  defp send_artifact(conn, artifact, {:binary, body}) do
+    conn = put_artifact_headers(conn, artifact)
     send_resp(conn, 200, body)
+  end
+
+  defp send_artifact(conn, _artifact, {:redirect, url}) do
+    conn
+    |> put_resp_header("location", url)
+    |> put_resp_header("cache-control", "no-store")
+    |> send_resp(302, "")
   end
 end

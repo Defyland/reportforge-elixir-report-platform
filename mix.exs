@@ -25,8 +25,10 @@ defmodule ReportForge.MixProject do
       mod: {ReportForge.Application, []},
       extra_applications: [
         :crypto,
+        :inets,
         :logger,
         :runtime_tools,
+        :ssl,
         :opentelemetry_exporter,
         :opentelemetry
       ]

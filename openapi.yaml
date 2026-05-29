@@ -408,6 +408,14 @@ paths:
               schema:
                 type: string
                 format: binary
+        '302':
+          description: Redirect to a short-lived object-storage URL when the active storage adapter supports presigned downloads
+          headers:
+            Location:
+              description: Presigned object-storage URL
+              schema:
+                type: string
+                format: uri
         '404':
           $ref: '#/components/responses/NotFound'
         '410':

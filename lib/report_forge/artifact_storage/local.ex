@@ -6,6 +6,7 @@ defmodule ReportForge.ArtifactStorage.Local do
   import Ecto.Query
 
   alias ReportForge
+  alias ReportForge.ArtifactStorage.Key
   alias ReportForge.Repo
   alias ReportForge.Reports.Artifact
   alias ReportForge.Signing
@@ -13,7 +14,7 @@ defmodule ReportForge.ArtifactStorage.Local do
   @impl ReportForge.ArtifactStorage
   # sobelow_skip ["Traversal.FileModule"]
   def put_artifact(%{body: body} = attrs) when is_binary(body) do
-    storage_key = storage_key(attrs)
+    storage_key = Key.build(attrs)
     path = local_path(storage_key)
 
     with :ok <- ensure_storage_dir(path),
@@ -115,14 +116,6 @@ defmodule ReportForge.ArtifactStorage.Local do
       })
 
     %Artifact{} |> Artifact.changeset(attrs) |> Repo.insert()
-  end
-
-  defp storage_key(attrs) do
-    report_id = Map.fetch!(attrs, :report_id)
-    id = Map.fetch!(attrs, :id)
-    filename = attrs |> Map.fetch!(:filename) |> Path.basename()
-
-    Path.join([report_id, "#{id}-#{filename}"])
   end
 
   defp local_path(storage_key) do
