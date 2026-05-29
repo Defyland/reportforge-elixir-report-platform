@@ -5,6 +5,7 @@ defmodule ReportForge.Case do
   use Oban.Testing, repo: ReportForge.Repo
 
   alias Ecto.Adapters.SQL.Sandbox
+  alias ReportForge.ArtifactStorage.Local
 
   import Plug.Conn
   import Plug.Test
@@ -29,6 +30,7 @@ defmodule ReportForge.Case do
 
     ReportForge.Metrics.reset!()
     ReportForge.RateLimiter.reset!()
+    Local.reset!()
     :ok
   end
 

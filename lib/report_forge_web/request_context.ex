@@ -6,8 +6,8 @@ defmodule ReportForgeWeb.RequestContext do
   require OpenTelemetry.Tracer, as: Tracer
 
   alias ReportForge
-  alias ReportForge.Metrics
   alias ReportForge.Observability
+  alias ReportForge.Telemetry
   alias ReportForge.Tracing
 
   def init(opts), do: opts
@@ -70,7 +70,7 @@ defmodule ReportForgeWeb.RequestContext do
         Tracer.set_status(:error, "http #{status}")
       end
 
-      Metrics.track_request(conn.method, conn.request_path, status, duration)
+      Telemetry.http_request(conn.method, conn.request_path, status, duration)
 
       Observability.log(:info, "http_request_completed", %{
         request_id: conn.assigns.request_id,

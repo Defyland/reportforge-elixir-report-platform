@@ -5,12 +5,24 @@ defmodule ReportForge.ArtifactStorage.Database do
 
   import Ecto.Query
 
+  alias ReportForge
   alias ReportForge.Repo
   alias ReportForge.Reports.Artifact
   alias ReportForge.Signing
 
   @impl ReportForge.ArtifactStorage
   def put_artifact(attrs) do
+    attrs =
+      case Map.get(attrs, :body) do
+        body when is_binary(body) ->
+          attrs
+          |> Map.put_new(:byte_size, byte_size(body))
+          |> Map.put_new(:checksum, ReportForge.sha256(body))
+
+        _other ->
+          attrs
+      end
+
     %Artifact{} |> Artifact.changeset(attrs) |> Repo.insert()
   end
 
@@ -30,6 +42,10 @@ defmodule ReportForge.ArtifactStorage.Database do
         end
     end
   end
+
+  @impl ReportForge.ArtifactStorage
+  def open_artifact(%Artifact{body: body}) when is_binary(body), do: {:ok, {:binary, body}}
+  def open_artifact(%Artifact{}), do: {:error, :not_found}
 
   @impl ReportForge.ArtifactStorage
   def delete_for_report(report_id) do

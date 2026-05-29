@@ -7,9 +7,13 @@ defmodule ReportForge.Metrics do
 
   alias ReportForge.Repo
   alias ReportForge.Reports.Report
+  alias ReportForge.Telemetry
 
   def start_link(_opts) do
-    Agent.start_link(fn -> initial_state() end, name: __MODULE__)
+    with {:ok, pid} <- Agent.start_link(fn -> initial_state() end, name: __MODULE__) do
+      attach_handlers()
+      {:ok, pid}
+    end
   end
 
   def reset! do
@@ -17,6 +21,56 @@ defmodule ReportForge.Metrics do
   end
 
   def track_request(method, path, status, duration_native) do
+    Telemetry.http_request(method, path, status, duration_native)
+  end
+
+  def track_report_created(template_name, format, deduplicated?) do
+    Telemetry.report_created(template_name, format, deduplicated?)
+  end
+
+  def track_report_completed(status, duration_ms) do
+    Telemetry.report_completed(status, duration_ms)
+  end
+
+  def handle_event([:report_forge, :http, :request, :stop], measurements, metadata, _config) do
+    track_request_metric(metadata.method, metadata.path, metadata.status, measurements.duration)
+  end
+
+  def handle_event([:report_forge, :report, :created], _measurements, metadata, _config) do
+    track_report_created_metric(metadata.template_name, metadata.format, metadata.deduplicated?)
+  end
+
+  def handle_event([:report_forge, :report, :completed], measurements, metadata, _config) do
+    track_report_completed_metric(metadata.status, measurements.duration_ms)
+  end
+
+  def handle_event(
+        [:report_forge, :report, :retry, :scheduled],
+        _measurements,
+        metadata,
+        _config
+      ) do
+    key = {metadata.error_code, metadata.attempt, metadata.max_attempts}
+
+    Agent.update(__MODULE__, fn state ->
+      count = Map.get(state.report_retries, key, 0)
+      %{state | report_retries: Map.put(state.report_retries, key, count + 1)}
+    end)
+  end
+
+  def handle_event(
+        [:report_forge, :maintenance, :cleanup, :completed],
+        _measurements,
+        metadata,
+        _config
+      ) do
+    Agent.update(__MODULE__, fn state ->
+      count = Map.get(state.cleanup_runs, metadata.task, 0)
+      %{state | cleanup_runs: Map.put(state.cleanup_runs, metadata.task, count + 1)}
+    end)
+  end
+
+  defp track_request_metric(method, path, status, duration_native) do
     duration_ms = System.convert_time_unit(duration_native, :native, :millisecond)
     key = {method, path, status}
 
@@ -32,7 +86,7 @@ defmodule ReportForge.Metrics do
     end)
   end
 
-  def track_report_created(template_name, format, deduplicated?) do
+  defp track_report_created_metric(template_name, format, deduplicated?) do
     key = {template_name, format, deduplicated?}
 
     Agent.update(__MODULE__, fn state ->
@@ -41,7 +95,7 @@ defmodule ReportForge.Metrics do
     end)
   end
 
-  def track_report_completed(status, duration_ms) do
+  defp track_report_completed_metric(status, duration_ms) do
     Agent.update(__MODULE__, fn state ->
       count = Map.get(state.reports_completed, status, 0)
 
@@ -78,6 +132,12 @@ defmodule ReportForge.Metrics do
         "# HELP reportforge_reports_completed_total Total completed report executions grouped by final status.",
         "# TYPE reportforge_reports_completed_total counter",
         render_reports_completed(state.reports_completed),
+        "# HELP reportforge_report_retries_total Total retryable report failures scheduled for another attempt.",
+        "# TYPE reportforge_report_retries_total counter",
+        render_report_retries(state.report_retries),
+        "# HELP reportforge_cleanup_runs_total Total maintenance cleanup runs grouped by task.",
+        "# TYPE reportforge_cleanup_runs_total counter",
+        render_cleanup_runs(state.cleanup_runs),
         "# HELP reportforge_report_duration_ms_sum Sum of report execution durations in milliseconds.",
         "# TYPE reportforge_report_duration_ms_sum counter",
         "reportforge_report_duration_ms_sum #{state.report_duration_ms_sum}",
@@ -124,6 +184,26 @@ defmodule ReportForge.Metrics do
     end)
   end
 
+  defp render_report_retries(report_retries) when map_size(report_retries) == 0 do
+    "reportforge_report_retries_total{error_code=\"source_timeout\",attempt=\"1\",max_attempts=\"3\"} 0"
+  end
+
+  defp render_report_retries(report_retries) do
+    Enum.map(report_retries, fn {{error_code, attempt, max_attempts}, count} ->
+      "reportforge_report_retries_total{error_code=\"#{error_code}\",attempt=\"#{attempt}\",max_attempts=\"#{max_attempts}\"} #{count}"
+    end)
+  end
+
+  defp render_cleanup_runs(cleanup_runs) when map_size(cleanup_runs) == 0 do
+    "reportforge_cleanup_runs_total{task=\"purge_expired_artifacts\"} 0"
+  end
+
+  defp render_cleanup_runs(cleanup_runs) do
+    Enum.map(cleanup_runs, fn {task, count} ->
+      "reportforge_cleanup_runs_total{task=\"#{task}\"} #{count}"
+    end)
+  end
+
   defp initial_state do
     %{
       http_requests: %{},
@@ -131,8 +211,21 @@ defmodule ReportForge.Metrics do
       request_duration_ms_count: 0,
       reports_created: %{},
       reports_completed: %{},
+      report_retries: %{},
+      cleanup_runs: %{},
       report_duration_ms_sum: 0,
       report_duration_ms_count: 0
     }
+  end
+
+  defp attach_handlers do
+    :telemetry.detach(__MODULE__)
+
+    :telemetry.attach_many(
+      __MODULE__,
+      Telemetry.events(),
+      &__MODULE__.handle_event/4,
+      nil
+    )
   end
 end

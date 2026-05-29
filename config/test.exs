@@ -3,7 +3,8 @@ import Config
 config :report_forge,
   server: false,
   exporter_step_delay_ms: 0,
-  signing_secret: "reportforge-test-signing-secret"
+  signing_secret: "reportforge-test-signing-secret",
+  artifact_storage_path: Path.join(System.tmp_dir!(), "report_forge_artifacts_test")
 
 config :opentelemetry, traces_exporter: :none
 

@@ -7,6 +7,7 @@ defmodule ReportForge.Maintenance.CleanupWorker do
   alias ReportForge.Audit
   alias ReportForge.Maintenance
   alias ReportForge.Observability
+  alias ReportForge.Telemetry
 
   @impl Oban.Worker
   def perform(%Job{args: %{"task" => "purge_expired_artifacts"}}) do
@@ -25,6 +26,8 @@ defmodule ReportForge.Maintenance.CleanupWorker do
       resource_id: "purge_expired_artifacts",
       metadata: result
     })
+
+    Telemetry.cleanup_completed("purge_expired_artifacts", result)
 
     :ok
   end
@@ -45,6 +48,8 @@ defmodule ReportForge.Maintenance.CleanupWorker do
       metadata: result
     })
 
+    Telemetry.cleanup_completed("purge_retained_reports", result)
+
     :ok
   end
 
@@ -64,6 +69,8 @@ defmodule ReportForge.Maintenance.CleanupWorker do
           resource_id: "run_cleanup",
           metadata: result
         })
+
+        Telemetry.cleanup_completed("run_cleanup", result)
 
         :ok
 

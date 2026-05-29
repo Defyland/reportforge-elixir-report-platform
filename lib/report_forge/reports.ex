@@ -9,12 +9,12 @@ defmodule ReportForge.Reports do
   alias ReportForge.ArtifactStorage
   alias ReportForge.Audit
   alias ReportForge.Identity.Organization
-  alias ReportForge.Metrics
   alias ReportForge.Oban
   alias ReportForge.Observability
   alias ReportForge.Repo
   alias ReportForge.Reports.{Generator, Report, ReportEvent, StateMachine, Worker}
   alias ReportForge.Signing
+  alias ReportForge.Telemetry
   alias ReportForge.Tracing
 
   def list_reports(%Organization{id: organization_id}, filters \\ %{}) do
@@ -134,7 +134,7 @@ defmodule ReportForge.Reports do
               }
             })
 
-            Metrics.track_report_created(
+            Telemetry.report_created(
               normalized.template_name,
               normalized.format,
               result.deduplicated?
@@ -368,7 +368,8 @@ defmodule ReportForge.Reports do
   def download_artifact(token) when is_binary(token) do
     with {:ok, payload} <- Signing.verify_download(token),
          {:ok, artifact} <- ArtifactStorage.fetch_artifact(token),
-         true <- payload["report_id"] == artifact.report_id do
+         true <- payload["report_id"] == artifact.report_id,
+         {:ok, source} <- ArtifactStorage.open_artifact(artifact) do
       Audit.record_best_effort(%{
         organization_id: artifact.organization_id,
         actor_type: "signed_url",
@@ -378,7 +379,7 @@ defmodule ReportForge.Reports do
         metadata: %{"artifact_id" => artifact.id, "filename" => artifact.filename}
       })
 
-      {:ok, artifact}
+      {:ok, %{artifact: artifact, source: source}}
     else
       false -> {:error, :not_found}
       {:error, :invalid_signature} -> {:error, :not_found}
@@ -577,6 +578,9 @@ defmodule ReportForge.Reports do
                  else
                    {:error, %Changeset{} = changeset} ->
                      Repo.rollback(changeset)
+
+                   {:error, {error_code, error_message}} ->
+                     Repo.rollback({error_code, error_message})
                  end
                else
                  :error ->
@@ -594,7 +598,7 @@ defmodule ReportForge.Reports do
            end
          end) do
       {:ok, %{report: updated_report, duration_ms: duration_ms}} ->
-        Metrics.track_report_completed(updated_report.status, duration_ms)
+        Telemetry.report_completed(updated_report.status, duration_ms)
 
         Observability.log(:info, "report_completed", %{
           report_id: updated_report.id,
@@ -666,6 +670,7 @@ defmodule ReportForge.Reports do
            end
          end) do
       {:ok, updated_report} ->
+        Telemetry.report_retry_scheduled(error_code, attempt, max_attempts)
         {:ok, updated_report}
 
       {:error, :attempts_exhausted} ->
@@ -727,7 +732,7 @@ defmodule ReportForge.Reports do
            end
          end) do
       {:ok, %{report: updated_report, duration_ms: duration_ms}} ->
-        Metrics.track_report_completed(updated_report.status, duration_ms)
+        Telemetry.report_completed(updated_report.status, duration_ms)
 
         Observability.log(:warning, "report_failed", %{
           report_id: updated_report.id,

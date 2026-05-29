@@ -204,13 +204,9 @@ defmodule ReportForgeWeb.Router do
 
   get "/downloads/:token" do
     case Reports.download_artifact(token) do
-      {:ok, artifact} ->
-        conn
-        |> put_resp_header("content-type", artifact.content_type)
-        |> put_resp_header("content-disposition", "attachment; filename=\"#{artifact.filename}\"")
-        |> put_resp_header("cache-control", "private, max-age=60")
-        |> put_resp_header("x-content-type-options", "nosniff")
-        |> send_resp(200, artifact.body)
+      {:ok, %{artifact: artifact, source: source}} ->
+        conn = put_artifact_headers(conn, artifact)
+        send_artifact(conn, source)
 
       {:error, reason} ->
         Responses.from_reason(conn, reason)
@@ -261,5 +257,23 @@ defmodule ReportForgeWeb.Router do
     conn.remote_ip
     |> Tuple.to_list()
     |> Enum.join(".")
+  end
+
+  defp put_artifact_headers(conn, artifact) do
+    conn
+    |> put_resp_header("content-type", artifact.content_type)
+    |> put_resp_header("content-disposition", "attachment; filename=\"#{artifact.filename}\"")
+    |> put_resp_header("cache-control", "private, max-age=60")
+    |> put_resp_header("x-content-type-options", "nosniff")
+  end
+
+  # sobelow_skip ["Traversal.SendFile"]
+  defp send_artifact(conn, {:file, path}) do
+    send_file(conn, 200, path)
+  end
+
+  # sobelow_skip ["XSS.SendResp"]
+  defp send_artifact(conn, {:binary, body}) do
+    send_resp(conn, 200, body)
   end
 end

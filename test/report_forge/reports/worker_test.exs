@@ -64,4 +64,30 @@ defmodule ReportForge.Reports.WorkerTest do
     assert {:ok, report_events} = Reports.list_report_events(organization, report.id)
     assert Enum.any?(report_events, &(&1.event_type == "report.retry_scheduled"))
   end
+
+  test "requeues when object storage is unavailable during artifact persistence" do
+    original_path = Application.get_env(:report_forge, :artifact_storage_path)
+    Application.put_env(:report_forge, :artifact_storage_path, "/dev/null")
+
+    on_exit(fn ->
+      Application.put_env(:report_forge, :artifact_storage_path, original_path)
+    end)
+
+    %{organization: organization} = Fixtures.organization_fixture()
+    report = Fixtures.report_fixture(organization, %{"filters" => %{"row_limit" => 2}})
+
+    assert {:error, _message} =
+             Worker.perform(%Oban.Job{
+               args: %{"report_id" => report.id},
+               attempt: 1,
+               max_attempts: 3
+             })
+
+    assert {:ok, queued_report} = Reports.get_report(organization, report.id)
+    assert queued_report.status == "queued"
+    assert queued_report.last_error_code == "storage_unavailable"
+
+    assert {:ok, report_events} = Reports.list_report_events(organization, report.id)
+    assert Enum.any?(report_events, &(&1.event_type == "report.retry_scheduled"))
+  end
 end
