@@ -1,0 +1,836 @@
+openapi: 3.0.3
+info:
+  title: ReportForge API
+  version: 0.1.0
+  license:
+    name: Proprietary portfolio sample
+    url: https://github.com/Defyland/reportforge-elixir-report-platform
+  contact:
+    name: ReportForge Engineering
+    url: https://github.com/Defyland/reportforge-elixir-report-platform
+  description: |
+    Contract-first API for ReportForge, an asynchronous reporting platform for large financial exports.
+    This contract documents the current executable Elixir slice backed by PostgreSQL persistence, signed download URLs, tenant API keys, OpenTelemetry trace correlation, and simulated long-running report generation.
+servers:
+  - url: https://api.reportforge.test
+    description: Example API base URL
+tags:
+  - name: Health
+    description: Liveness, readiness, and metrics endpoints.
+  - name: Organizations
+    description: Tenant bootstrap and current-organization inspection.
+  - name: API Keys
+    description: Tenant-scoped API key lifecycle operations.
+  - name: Reports
+    description: Asynchronous report lifecycle management.
+  - name: Downloads
+    description: Signed artifact delivery endpoints.
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: The process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      operationId: getReadiness
+      security: []
+      responses:
+        '200':
+          description: The runtime is ready for traffic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      operationId: getMetrics
+      security: []
+      responses:
+        '200':
+          description: Prometheus exposition format
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+  /api/v1/organizations:
+    post:
+      tags: [Organizations]
+      summary: Register a tenant organization
+      operationId: createOrganization
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationEnvelope'
+      responses:
+        '201':
+          description: Organization created with bootstrap API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationBootstrapResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/organizations/me:
+    get:
+      tags: [Organizations]
+      summary: Inspect the current tenant
+      operationId: getCurrentOrganization
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Current organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/api-keys:
+    get:
+      tags: [API Keys]
+      summary: List API keys for the current tenant
+      operationId: listApiKeys
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: API keys for the tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [API Keys]
+      summary: Issue a new API key for the current tenant
+      operationId: createApiKey
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyEnvelope'
+      responses:
+        '201':
+          description: API key issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyCreateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /api/v1/api-keys/{id}:
+    delete:
+      tags: [API Keys]
+      summary: Revoke an API key
+      operationId: revokeApiKey
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: API key revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/reports:
+    get:
+      tags: [Reports]
+      summary: List reports for the current tenant
+      operationId: listReports
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [queued, running, succeeded, failed, cancelled]
+        - in: query
+          name: template_name
+          schema:
+            type: string
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [csv, json, zip]
+      responses:
+        '200':
+          description: Reports for the tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Reports]
+      summary: Create an asynchronous report request
+      operationId: createReport
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportEnvelope'
+            examples:
+              cashPositionCsv:
+                value:
+                  report:
+                    template_name: cash_position
+                    format: csv
+                    requested_by: analyst@example.com
+                    idempotency_key: rpt-20260528-1001
+                    filters:
+                      row_limit: 5
+                      currency: USD
+      responses:
+        '202':
+          description: Report accepted for asynchronous generation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '200':
+          description: Existing report returned because the request was deduplicated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/reports/{id}:
+    get:
+      tags: [Reports]
+      summary: Fetch a report snapshot
+      operationId: getReport
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Report found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/reports/{id}/events:
+    get:
+      tags: [Reports]
+      summary: List report lifecycle events
+      operationId: listReportEvents
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Report events in chronological order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportEventListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/reports/{id}/download:
+    get:
+      tags: [Reports]
+      summary: Resolve the current signed download URL
+      operationId: getReportDownloadLink
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Signed artifact URL available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadLinkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '410':
+          $ref: '#/components/responses/Gone'
+  /api/v1/reports/{id}/cancel:
+    post:
+      tags: [Reports]
+      summary: Cancel a queued or running report
+      operationId: cancelReport
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Report cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /api/v1/reports/{id}/retry:
+    post:
+      tags: [Reports]
+      summary: Retry a failed or cancelled report
+      operationId: retryReport
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Report moved back to the queue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /downloads/{token}:
+    get:
+      tags: [Downloads]
+      summary: Download a generated artifact through a signed URL
+      operationId: downloadArtifact
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Artifact binary payload
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                type: string
+                format: binary
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+  responses:
+    Unauthorized:
+      description: API key missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationFailed:
+      description: Request body validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Resource is in a conflicting state
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Gone:
+      description: Signed artifact URL expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: Request was rate limited
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: Unexpected internal failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: Dependency or runtime is not ready
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    Meta:
+      type: object
+      required: [request_id, correlation_id, trace_id, timestamp]
+      properties:
+        request_id:
+          type: string
+        correlation_id:
+          type: string
+        trace_id:
+          type: string
+          description: W3C trace ID for the current request span
+        timestamp:
+          type: string
+          format: date-time
+        deduplicated:
+          type: boolean
+    ErrorDetail:
+      type: object
+      required: [field, issue]
+      properties:
+        field:
+          type: string
+        issue:
+          type: string
+    ErrorBody:
+      type: object
+      required: [code, message, retryable, details]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+    ErrorResponse:
+      type: object
+      required: [error, meta]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    ReadinessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+        timestamp:
+          type: string
+          format: date-time
+    Organization:
+      type: object
+      required: [id, name, slug, retention_days, inserted_at, updated_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        retention_days:
+          type: integer
+        inserted_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ApiKey:
+      type: object
+      required: [id, name, key_prefix, token_hint, inserted_at, updated_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        key_prefix:
+          type: string
+        token_hint:
+          type: string
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        inserted_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ReportArtifact:
+      type: object
+      nullable: true
+      properties:
+        filename:
+          type: string
+        content_type:
+          type: string
+        download_url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+    ReportError:
+      type: object
+      nullable: true
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+        template_name:
+          type: string
+        format:
+          type: string
+          enum: [csv, json, zip]
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, cancelled]
+        requested_by:
+          type: string
+        filters:
+          type: object
+          additionalProperties: true
+        columns:
+          type: array
+          items:
+            type: string
+        idempotency_key:
+          type: string
+          nullable: true
+        fingerprint:
+          type: string
+        correlation_id:
+          type: string
+        progress_pct:
+          type: integer
+        row_count:
+          type: integer
+        byte_size:
+          type: integer
+        checksum:
+          type: string
+          nullable: true
+        attempt_count:
+          type: integer
+        artifact:
+          $ref: '#/components/schemas/ReportArtifact'
+        error:
+          $ref: '#/components/schemas/ReportError'
+        inserted_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+    ReportEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        report_id:
+          type: string
+        event_type:
+          type: string
+        status:
+          type: string
+        progress_pct:
+          type: integer
+        correlation_id:
+          type: string
+        trace_id:
+          type: string
+          description: Trace ID carried from the originating request into async execution
+        span_id:
+          type: string
+          description: Span ID active when the lifecycle event was recorded
+        metadata:
+          type: object
+          additionalProperties: true
+        inserted_at:
+          type: string
+          format: date-time
+    DownloadLink:
+      type: object
+      properties:
+        report_id:
+          type: string
+        url:
+          type: string
+          format: uri
+        filename:
+          type: string
+        content_type:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+    CreateOrganizationEnvelope:
+      type: object
+      required: [organization]
+      properties:
+        organization:
+          type: object
+          required: [name, slug, retention_days]
+          properties:
+            name:
+              type: string
+            slug:
+              type: string
+            retention_days:
+              type: integer
+    CreateApiKeyEnvelope:
+      type: object
+      required: [api_key]
+      properties:
+        api_key:
+          type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+    CreateReportEnvelope:
+      type: object
+      required: [report]
+      properties:
+        report:
+          type: object
+          required: [template_name, format, requested_by]
+          properties:
+            template_name:
+              type: string
+              enum: [cash_position, ledger_summary, invoice_audit]
+            format:
+              type: string
+              enum: [csv, json, zip]
+            requested_by:
+              type: string
+            idempotency_key:
+              type: string
+            correlation_id:
+              type: string
+            filters:
+              type: object
+              additionalProperties: true
+    OrganizationBootstrapResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            organization:
+              $ref: '#/components/schemas/Organization'
+            bootstrap_api_key:
+              type: string
+            api_key:
+              $ref: '#/components/schemas/ApiKey'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    OrganizationResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Organization'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ApiKeyResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/ApiKey'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ApiKeyCreateResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            api_key:
+              $ref: '#/components/schemas/ApiKey'
+            token:
+              type: string
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ApiKeyListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKey'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ReportResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Report'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ReportListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Report'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    ReportEventListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportEvent'
+        meta:
+          $ref: '#/components/schemas/Meta'
+    DownloadLinkResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/DownloadLink'
+        meta:
+          $ref: '#/components/schemas/Meta'
