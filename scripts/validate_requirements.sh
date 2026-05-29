@@ -17,7 +17,10 @@ required_paths=(
   "README.md"
   "openapi.yaml"
   "mix.exs"
+  "Dockerfile"
   ".github/workflows/ci.yml"
+  "config/prod.exs"
+  "docker-compose.yml"
   "benchmarks/baseline.md"
   "benchmarks/results/README.md"
   "docs/implementation-plan.md"
@@ -31,7 +34,15 @@ required_paths=(
   "docs/architecture/observability.md"
   "docs/architecture/threat-model.md"
   "docs/architecture/grafana-dashboard.json"
+  "docs/architecture/production-readiness-review.md"
   "docs/runbooks/common-issues.md"
+  "docs/runbooks/failure-drills.md"
+  "ops/grafana/provisioning/dashboards/reportforge.yml"
+  "ops/grafana/provisioning/datasources/prometheus.yml"
+  "ops/otel/collector.yml"
+  "ops/prometheus/alerts.yml"
+  "ops/prometheus/prometheus.yml"
+  "scripts/smoke.sh"
 )
 
 required_dirs=(

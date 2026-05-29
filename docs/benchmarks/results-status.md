@@ -17,4 +17,4 @@
 ## Remaining follow-up
 
 - rerun under Docker or CI once a daemon-backed environment is available
-- repeat after container-backed object storage and production telemetry export are added
+- repeat against the Compose stack and later against the deployed production target

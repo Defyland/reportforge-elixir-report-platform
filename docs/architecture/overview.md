@@ -15,8 +15,9 @@ ReportForge is currently a modular Elixir API with four main layers:
 - the domain layer mutates transactional state through `ReportForge.Repo`
 - long-running report work is delegated to an Oban job with propagated trace context
 - telemetry events, metrics, and structured logs record the result
+- the Compose stack can route traces to an OpenTelemetry Collector and metrics to Prometheus/Grafana
 
 ## Planned evolution
 
-- run container-backed MinIO/S3 integration tests in CI and deployment pipelines
+- deploy the same runtime shape to the chosen production platform with managed dependencies
 - add collector-backed metric export and validate dashboards against emitted telemetry

@@ -97,6 +97,7 @@ Checks:
 - confirm `database`, `oban`, and `signer` checks are all `up`
 - inspect `/metrics` and the logs for `maintenance_cleanup_completed`
 - confirm the `maintenance` Oban queue is enabled and draining
+- if using MinIO/S3, confirm object delete permissions are present
 
 Likely cause in this slice:
 
@@ -109,6 +110,8 @@ Action:
 - enqueue `purge_expired_artifacts` or `purge_retained_reports` manually in a console
 - confirm the target rows are actually expired or outside the tenant retention window
 - inspect audit logs for `maintenance.purge_expired_artifacts` or `maintenance.purge_retained_reports`
+
+Operational drills for these scenarios live in [failure-drills.md](./failure-drills.md).
 
 ## Service fails to boot in production with signing-secret error
 

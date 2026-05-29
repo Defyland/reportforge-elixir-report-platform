@@ -147,8 +147,10 @@ The current test suite covers:
 - report event visibility and lifecycle assertions
 - audit persistence for tenant bootstrap, key management, downloads, and report mutations
 - retention-job and artifact-cleanup execution through Oban
+- real MinIO integration for the S3-compatible storage adapter
+- production-like smoke validation through Docker Compose
 
-The next phases should add container-backed MinIO/S3 integration tests and more recovery scenarios around retries, cancellations, queue backpressure, and dependency outages.
+The next phases should add more recovery scenarios around retries, cancellations, queue backpressure, and dependency outages.
 
 ## Performance benchmarks
 
@@ -251,6 +253,20 @@ docker build -t reportforge .
 docker run --rm -p 4000:4000 reportforge
 ```
 
+Run the production-like local stack:
+
+```sh
+docker compose up -d --build
+BASE_URL=http://localhost:4000 bash scripts/smoke.sh
+```
+
+The stack includes PostgreSQL, MinIO, ReportForge, OpenTelemetry Collector, Prometheus, and Grafana.
+
+- API: `http://localhost:4000`
+- MinIO console: `http://localhost:9001`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
+
 ## How to run tests
 
 Run the Elixir suite:
@@ -295,7 +311,7 @@ The repository explicitly models and documents these scenarios:
 - cancellation during queued or running work
 - retry of terminal reports after failure or cancellation
 
-Operational guidance lives in [docs/runbooks/common-issues.md](./docs/runbooks/common-issues.md).
+Operational guidance lives in [docs/runbooks/common-issues.md](./docs/runbooks/common-issues.md). Failure drills live in [docs/runbooks/failure-drills.md](./docs/runbooks/failure-drills.md).
 
 ## Roadmap
 
@@ -303,4 +319,4 @@ Operational guidance lives in [docs/runbooks/common-issues.md](./docs/runbooks/c
 2. Phase 2: PostgreSQL schema, durable report state, and OpenTelemetry request/worker trace correlation.
 3. Phase 3: Oban jobs, scheduled reports, cancellation safety, and persistence-backed retries.
 4. Phase 4: richer telemetry metrics, deployment collector integration, and key-rotation workflows.
-5. Phase 5: container-backed storage integration tests, read-replica-aware exporters, XLSX/PDF adapters, and multi-file bundle templates.
+5. Phase 5: managed deployment target, read-replica-aware exporters, XLSX/PDF adapters, and multi-file bundle templates.

@@ -18,7 +18,7 @@ This document audits the current repository against [`specs/general-project-spec
 | OpenAPI contract | Done | [openapi.yaml](../openapi.yaml), [test/report_forge_web/openapi_contract_test.exs](../../test/report_forge_web/openapi_contract_test.exs), local `redocly lint openapi.yaml` pass | Expand examples as endpoints evolve |
 | API examples and error format docs | Done | [docs/api/http-examples.md](./api/http-examples.md), [docs/api/error-format.md](./api/error-format.md) | Keep synchronized with contract changes |
 | ADRs and architecture docs | Done | [docs/adr](./adr/), [docs/architecture](./architecture/) | Keep ADRs synchronized with runtime changes |
-| CI workflow | Done | [.github/workflows/ci.yml](../.github/workflows/ci.yml), local `mix ci` pass, explicit jobs for lint/format/tests/security/OpenAPI/coverage/docker | Watch for the first green GitHub Actions run after push |
+| CI workflow | Done | [.github/workflows/ci.yml](../.github/workflows/ci.yml), local `mix ci` pass, explicit jobs for lint/format/tests/security/OpenAPI/coverage/docker, real MinIO integration, and Compose smoke | Watch for the first green GitHub Actions run after push |
 | Unit / request / auth / failure tests | Done | [test](../test/), local `mix test` pass | Expand coverage as new runtime layers land |
 | Database tests | Done | [ReportForge.Repo](../../lib/report_forge/repo.ex), [migrations](../../priv/repo/migrations/), [test/report_forge/persistence_test.exs](../../test/report_forge/persistence_test.exs), [test/report_forge/audit_test.exs](../../test/report_forge/audit_test.exs), [test/report_forge/artifact_storage_test.exs](../../test/report_forge/artifact_storage_test.exs), [test/report_forge/artifact_storage_s3_test.exs](../../test/report_forge/artifact_storage_s3_test.exs), [test/report_forge/maintenance/cleanup_worker_test.exs](../../test/report_forge/maintenance/cleanup_worker_test.exs), local `mix test --only db` and `mix ci` pass with ephemeral PostgreSQL | Expand coverage when archival flows land |
 | Messaging tests | Done | [test/report_forge/reports/worker_test.exs](../../test/report_forge/reports/worker_test.exs), [test/report_forge/reports_test.exs](../../test/report_forge/reports_test.exs), and [test/report_forge/maintenance/cleanup_worker_test.exs](../../test/report_forge/maintenance/cleanup_worker_test.exs) cover enqueueing, draining, retry/cancel flow, classified transient retries, backoff, and recurring async cleanup | Add broker-specific tests only if a broker is introduced later |
@@ -28,7 +28,7 @@ This document audits the current repository against [`specs/general-project-spec
 | Messaging baseline topology | Done | current async architecture uses PostgreSQL + Oban rather than RabbitMQ or another external broker, so the broker-topology subsection of the spec is not applicable to the shipped runtime | If a broker is introduced later, add exchanges, queues, DLQ, retry, idempotency, ack, and correlation-ID documentation plus tests |
 | Data and transaction baseline | Done | [docs/architecture/database-design.md](./architecture/database-design.md), [lib/report_forge/identity.ex](../../lib/report_forge/identity.ex), [lib/report_forge/reports.ex](../../lib/report_forge/reports.ex), [lib/report_forge/artifact_storage.ex](../../lib/report_forge/artifact_storage.ex), [lib/report_forge/artifact_storage/local.ex](../../lib/report_forge/artifact_storage/local.ex), [lib/report_forge/artifact_storage/s3.ex](../../lib/report_forge/artifact_storage/s3.ex), [lib/report_forge/audit.ex](../../lib/report_forge/audit.ex), [lib/report_forge/maintenance.ex](../../lib/report_forge/maintenance.ex), migrations, transaction test rollback proof, S3 compensation tests, and concurrent deduplication tests | Extend the schema only as later phases introduce archival flows |
 | Commit history standard | Done | [git log](../../.git) on branch `codex/reportforge-implementation` now shows atomic Conventional Commits for tooling, core runtime, and documentation/benchmark evidence | Keep future changes equally atomic |
-| Docker build validation | Done | [.github/workflows/ci.yml](../.github/workflows/ci.yml) includes an explicit `docker build` job and [Dockerfile](../Dockerfile) is versioned | Local ad-hoc proof still depends on a running Docker daemon |
+| Docker build validation | Done | [.github/workflows/ci.yml](../.github/workflows/ci.yml) includes explicit `docker build` and Compose smoke jobs, [Dockerfile](../Dockerfile) is versioned, and [docker-compose.yml](../docker-compose.yml) wires the production-like stack | Local ad-hoc proof still depends on a running Docker daemon |
 
 ## Remaining work by phase
 
@@ -56,7 +56,7 @@ Completed evidence:
 
 Remaining work:
 
-- no spec-blocking work remains in this phase; future remote CI runs will provide extra operational confidence
+- no spec-blocking work remains in this phase; remote CI now includes a real MinIO storage integration job and a production-like Compose smoke job
 
 ## Phase 2: durable runtime
 
@@ -128,7 +128,7 @@ Completed evidence:
 Remaining work:
 
 - rerun the suite under Docker or CI once a daemon-backed environment is available
-- repeat against container-backed object storage and production metric export
+- repeat against the Compose stack and, later, the deployed production target
 
 ## Phase 6: operational hardening
 
@@ -166,7 +166,7 @@ Remaining work:
 - updated README, diagrams, runbooks, ADRs, and the implementation plan to reflect the PostgreSQL + Oban runtime that is actually shipping
 - ended this gate at `78.15%` total coverage with the Oban path enabled
 - added audit-style structured log events for tenant and report actions
-- reran the full gate with `mix ci`, `bash scripts/validate_requirements.sh`, and `redocly lint`, ending with `46` tests passing, `78.15%` total coverage, and `3` non-blocking OpenAPI warnings
+- reran the full gate with `mix ci`, `bash scripts/validate_requirements.sh`, `markdownlint`, and `redocly lint`, ending with `47` tests passing, `1` intentional MinIO skip in the default local run, `78.15%` total coverage, and `3` non-blocking OpenAPI warnings
 - captured dated benchmark evidence under [benchmarks/results/2026-05-29](../benchmarks/results/2026-05-29/README.md), including a rate-limit failure mode and a benchmark-tuned passing load profile
 - made tenant rate limits configurable by environment so benchmark runs can isolate queue and persistence behavior without changing product defaults
 - added persistent audit storage for privileged tenant and report actions, backed by dedicated tests
@@ -176,6 +176,7 @@ Remaining work:
 - added an explicit artifact-storage boundary with local, S3-compatible, and PostgreSQL compatibility adapters plus tests
 - moved default artifact bytes to local object storage with database metadata and streaming downloads
 - added S3/MinIO-compatible artifact storage with SigV4 request signing, presigned redirects, transient failure classification, and object-delete compensation
+- added real MinIO integration coverage in CI, production-like Docker Compose, Prometheus alert rules, Grafana provisioning, OTel collector wiring, Docker build validation, and an executable smoke test
 - added concurrent idempotency and fingerprint deduplication tests
 - added classified Oban retries with backoff for transient report worker failures
 - added OpenAPI response contract tests against live route responses
@@ -184,6 +185,6 @@ Remaining work:
 
 ## Blockers that still prevent full completion
 
-- none at the repository-spec level; the only remaining limitation observed locally is that ad-hoc `docker build` could not be executed without a running Docker daemon, even though CI already covers that validation
+- none at the repository-spec level; any remaining production work is environment-specific infrastructure, not repository completeness
 
 The repository now satisfies the current repository-level requirements in [`specs/general-project-spec.md`](../../specs/general-project-spec.md). Any remaining items in this plan are optional future hardening or infrastructure-specific enhancements, not spec blockers.
