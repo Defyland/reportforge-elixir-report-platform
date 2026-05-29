@@ -6,13 +6,14 @@ defmodule ReportForge.Reports do
 
   alias Ecto.Changeset
   alias ReportForge
+  alias ReportForge.ArtifactStorage
   alias ReportForge.Audit
   alias ReportForge.Identity.Organization
   alias ReportForge.Metrics
   alias ReportForge.Oban
   alias ReportForge.Observability
   alias ReportForge.Repo
-  alias ReportForge.Reports.{Artifact, Generator, Report, ReportEvent, StateMachine, Worker}
+  alias ReportForge.Reports.{Generator, Report, ReportEvent, StateMachine, Worker}
   alias ReportForge.Signing
   alias ReportForge.Tracing
 
@@ -256,10 +257,7 @@ defmodule ReportForge.Reports do
 
                %Report{organization_id: ^organization_id} = report ->
                  with {:ok, next_status} <- StateMachine.transition(report.status, :retry),
-                      {_count, _rows} <-
-                        Repo.delete_all(
-                          from(artifact in Artifact, where: artifact.report_id == ^report.id)
-                        ),
+                      _deleted_artifacts <- ArtifactStorage.delete_for_report(report.id),
                       {:ok, updated_report} <-
                         update_report(report, %{
                           status: next_status,
@@ -343,7 +341,7 @@ defmodule ReportForge.Reports do
   def get_download_link(%Organization{id: organization_id}, report_id) do
     with {:ok, %Report{organization_id: ^organization_id} = report} <-
            get_report(%Organization{id: organization_id}, report_id),
-         {:ok, artifact} <- fetch_artifact(report.artifact_token) do
+         {:ok, artifact} <- ArtifactStorage.fetch_artifact(report.artifact_token) do
       Audit.record_best_effort(%{
         organization_id: organization_id,
         action: "report.download_link_resolved",
@@ -369,7 +367,7 @@ defmodule ReportForge.Reports do
 
   def download_artifact(token) when is_binary(token) do
     with {:ok, payload} <- Signing.verify_download(token),
-         {:ok, artifact} <- fetch_artifact(token),
+         {:ok, artifact} <- ArtifactStorage.fetch_artifact(token),
          true <- payload["report_id"] == artifact.report_id do
       Audit.record_best_effort(%{
         organization_id: artifact.organization_id,
@@ -546,6 +544,8 @@ defmodule ReportForge.Reports do
                           artifact_content_type: artifact.content_type,
                           download_expires_at: download_expires_at,
                           completed_at: now,
+                          last_error_code: nil,
+                          last_error: nil,
                           updated_at: now
                         }),
                       {:ok, _event} <-
@@ -563,7 +563,7 @@ defmodule ReportForge.Reports do
                           )
                         ),
                       {:ok, _artifact} <-
-                        persist_artifact(%{
+                        ArtifactStorage.put_artifact(%{
                           id: ReportForge.generate_id("art"),
                           report_id: report.id,
                           organization_id: report.organization_id,
@@ -615,6 +615,67 @@ defmodule ReportForge.Reports do
 
       {:error, {:conflict, _message} = conflict} ->
         {:error, conflict}
+
+      {:error, %Changeset{} = changeset} ->
+        {:error, {:validation_failed, translate_changeset_errors(changeset)}}
+    end
+  end
+
+  def schedule_processing_retry(report_id, error_code, error_message, attempt, max_attempts) do
+    case Repo.transaction(fn ->
+           case load_locked_report(report_id) do
+             %Report{status: "running"} = report when attempt < max_attempts ->
+               with {:ok, updated_report} <-
+                      update_report(report, %{
+                        status: "queued",
+                        progress_pct: 0,
+                        attempt_count: max(report.attempt_count, attempt + 1),
+                        last_error_code: error_code,
+                        last_error: error_message,
+                        updated_at: ReportForge.utc_now()
+                      }),
+                    {:ok, _event} <-
+                      persist_event(
+                        event(
+                          report.id,
+                          report.correlation_id,
+                          "report.retry_scheduled",
+                          updated_report.status,
+                          updated_report.progress_pct,
+                          %{
+                            "error_code" => error_code,
+                            "attempt" => attempt,
+                            "max_attempts" => max_attempts
+                          }
+                        )
+                      ) do
+                 updated_report
+               else
+                 {:error, %Changeset{} = changeset} ->
+                   Repo.rollback(changeset)
+               end
+
+             %Report{status: "running"} ->
+               Repo.rollback(:attempts_exhausted)
+
+             %Report{status: "cancelled"} ->
+               Repo.rollback(:cancelled)
+
+             nil ->
+               Repo.rollback(:not_found)
+           end
+         end) do
+      {:ok, updated_report} ->
+        {:ok, updated_report}
+
+      {:error, :attempts_exhausted} ->
+        {:error, :attempts_exhausted}
+
+      {:error, :cancelled} ->
+        :cancelled
+
+      {:error, :not_found} ->
+        {:error, :not_found}
 
       {:error, %Changeset{} = changeset} ->
         {:error, {:validation_failed, translate_changeset_errors(changeset)}}
@@ -697,22 +758,6 @@ defmodule ReportForge.Reports do
     |> Oban.insert()
   end
 
-  defp fetch_artifact(nil), do: {:error, :conflict}
-
-  defp fetch_artifact(token) do
-    case Repo.get_by(Artifact, token: token) do
-      nil ->
-        {:error, :not_found}
-
-      artifact ->
-        if Signing.expired?(artifact.expires_at) do
-          {:error, :gone}
-        else
-          {:ok, artifact}
-        end
-    end
-  end
-
   defp find_existing_report_by_idempotency(_organization_id, nil), do: nil
   defp find_existing_report_by_idempotency(_organization_id, ""), do: nil
 
@@ -766,10 +811,6 @@ defmodule ReportForge.Reports do
     %ReportEvent{}
     |> ReportEvent.changeset(Map.from_struct(report_event))
     |> Repo.insert()
-  end
-
-  defp persist_artifact(attrs) do
-    %Artifact{} |> Artifact.changeset(attrs) |> Repo.insert()
   end
 
   defp load_locked_report(report_id) do

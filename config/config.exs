@@ -3,6 +3,7 @@ import Config
 config :report_forge, ecto_repos: [ReportForge.Repo]
 
 config :report_forge,
+  artifact_storage_adapter: ReportForge.ArtifactStorage.Database,
   api_key_header: "x-api-key",
   base_url: "http://localhost:4000",
   report_ttl_seconds: 86_400,

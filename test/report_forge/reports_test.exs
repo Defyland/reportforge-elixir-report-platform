@@ -1,7 +1,12 @@
 defmodule ReportForge.ReportsTest do
   use ReportForge.Case, async: false
 
+  import Ecto.Query
+
+  alias ReportForge.Repo
   alias ReportForge.Reports
+  alias ReportForge.Reports.Report
+  alias ReportForge.Reports.Worker
 
   test "deduplicates repeated idempotency keys for the same tenant" do
     %{organization: organization} = Fixtures.organization_fixture()
@@ -21,6 +26,42 @@ defmodule ReportForge.ReportsTest do
              Reports.create_report(organization, payload)
 
     assert second_report.id == first_report.id
+  end
+
+  test "deduplicates concurrent idempotency requests for the same tenant" do
+    %{organization: organization} = Fixtures.organization_fixture()
+
+    payload = %{
+      "template_name" => "cash_position",
+      "format" => "csv",
+      "requested_by" => "finance@example.com",
+      "idempotency_key" => "concurrent-idempotency-key",
+      "filters" => %{"row_limit" => 4}
+    }
+
+    results = create_reports_concurrently(organization, payload)
+    report_ids = Enum.map(results, & &1.report.id)
+
+    assert Enum.uniq(report_ids) |> length() == 1
+    assert Enum.count(results, & &1.deduplicated?) == 7
+    assert report_count(organization.id, "concurrent-idempotency-key") == 1
+  end
+
+  test "deduplicates concurrent equivalent fingerprints without an idempotency key" do
+    %{organization: organization} = Fixtures.organization_fixture()
+
+    payload = %{
+      "template_name" => "cash_position",
+      "format" => "csv",
+      "requested_by" => "finance@example.com",
+      "filters" => %{"row_limit" => 4}
+    }
+
+    results = create_reports_concurrently(organization, payload)
+    report_ids = Enum.map(results, & &1.report.id)
+
+    assert Enum.uniq(report_ids) |> length() == 1
+    assert Enum.count(results, & &1.deduplicated?) == 7
   end
 
   test "produces an artifact and a signed download url" do
@@ -44,10 +85,30 @@ defmodule ReportForge.ReportsTest do
         "filters" => %{"row_limit" => 2, "simulate_failure" => "source_timeout"}
       })
 
-    assert %{success: 1} = drain_report_jobs()
+    assert {:error, "upstream warehouse query timed out"} =
+             Worker.perform(%Oban.Job{
+               args: %{"report_id" => report.id},
+               attempt: 1,
+               max_attempts: 3
+             })
+
+    assert {:error, "upstream warehouse query timed out"} =
+             Worker.perform(%Oban.Job{
+               args: %{"report_id" => report.id},
+               attempt: 2,
+               max_attempts: 3
+             })
+
+    assert {:ok, %{status: "failed"}} =
+             Worker.perform(%Oban.Job{
+               args: %{"report_id" => report.id},
+               attempt: 3,
+               max_attempts: 3
+             })
 
     assert {:ok, failed_report} = Reports.get_report(organization, report.id)
     assert failed_report.last_error_code == "source_timeout"
+    assert failed_report.attempt_count == 3
   end
 
   test "cancels a running report and allows a retry back to the queue" do
@@ -72,5 +133,29 @@ defmodule ReportForge.ReportsTest do
     assert retried_report.status == "queued"
     assert retried_report.attempt_count == 2
     assert_enqueued(worker: ReportForge.Reports.Worker, args: %{"report_id" => report.id})
+  end
+
+  defp create_reports_concurrently(organization, payload) do
+    1..8
+    |> Task.async_stream(
+      fn _index ->
+        {:ok, result} = Reports.create_report(organization, payload)
+        result
+      end,
+      max_concurrency: 8,
+      timeout: 5_000
+    )
+    |> Enum.map(fn {:ok, result} -> result end)
+  end
+
+  defp report_count(organization_id, idempotency_key) do
+    Repo.aggregate(
+      from(report in Report,
+        where:
+          report.organization_id == ^organization_id and
+            report.idempotency_key == ^idempotency_key
+      ),
+      :count
+    )
   end
 end

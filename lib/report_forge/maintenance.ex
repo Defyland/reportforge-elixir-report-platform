@@ -3,19 +3,15 @@ defmodule ReportForge.Maintenance do
 
   import Ecto.Query
 
+  alias ReportForge.ArtifactStorage
   alias ReportForge.Identity.Organization
   alias ReportForge.Repo
-  alias ReportForge.Reports.{Artifact, Report}
+  alias ReportForge.Reports.Report
 
   @terminal_statuses ["succeeded", "failed", "cancelled"]
 
   def purge_expired_artifacts(now \\ ReportForge.utc_now()) do
-    expired_artifact_query = from(artifact in Artifact, where: artifact.expires_at <= ^now)
-
-    report_ids =
-      expired_artifact_query
-      |> select([artifact], artifact.report_id)
-      |> Repo.all()
+    report_ids = ArtifactStorage.expired_report_ids(now)
 
     report_update_count =
       case report_ids do
@@ -38,7 +34,7 @@ defmodule ReportForge.Maintenance do
           count
       end
 
-    {artifact_delete_count, _rows} = Repo.delete_all(expired_artifact_query)
+    artifact_delete_count = ArtifactStorage.delete_expired(now)
 
     %{
       artifact_delete_count: artifact_delete_count,
