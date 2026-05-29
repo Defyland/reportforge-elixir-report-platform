@@ -29,3 +29,7 @@ The current slice is intentionally infrastructure-light:
 - signed PostgreSQL-backed artifact delivery instead of S3 or MinIO
 
 Those are deliberate trade-offs to keep artifact storage simple while the queueing layer is already durable and restart-safe.
+
+## Review note
+
+The latest senior-oriented technical review for this slice lives in [docs/architecture/senior-technical-assessment.md](./architecture/senior-technical-assessment.md).
