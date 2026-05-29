@@ -38,6 +38,7 @@ Meaning:
 Action:
 
 - call `GET /readyz` and confirm the database and signer checks are `up`
+- confirm `REPORT_FORGE_ARTIFACT_STORAGE_PATH` exists and is writable by the service process
 - inspect report events for `report.retry_scheduled`
 - retry only after storage health has recovered
 

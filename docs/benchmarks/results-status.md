@@ -17,4 +17,4 @@
 ## Remaining follow-up
 
 - rerun under Docker or CI once a daemon-backed environment is available
-- repeat after object storage and production telemetry export are added
+- repeat after a MinIO/S3 adapter and production telemetry export are added

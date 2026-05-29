@@ -2,7 +2,7 @@
 
 ReportForge is an Elixir-based reporting platform for finance and operations teams that need large CSV, JSON, and ZIP exports without blocking transactional systems.
 
-> Status: executable slice with PostgreSQL-backed runtime, Oban-backed async execution, persistent audit logs, recurring cleanup jobs, and request-to-worker trace correlation. The repository now includes an HTTP API, tenant API keys, asynchronous report execution with signed downloads, transactional persistence, OpenTelemetry spans with OTLP export proof, request tests, operational docs, and CI scaffolding. Object storage, richer metrics pipelines, and deployment-specific secret backends remain the main next steps.
+> Status: executable slice with PostgreSQL-backed runtime, local object storage for artifacts, Oban-backed async execution, persistent audit logs, recurring cleanup jobs, and request-to-worker trace correlation. The repository now includes an HTTP API, tenant API keys, asynchronous report execution with signed streaming downloads, transactional metadata persistence, OpenTelemetry spans with OTLP export proof, telemetry-derived metrics, request tests, operational docs, and CI scaffolding. A MinIO/S3 adapter, richer production metric export, and deployment-specific secret backends remain the main next steps.
 
 Gap audit and remaining work: [docs/implementation-plan.md](./docs/implementation-plan.md)
 
@@ -53,8 +53,9 @@ The current implementation is a lightweight Elixir service built with Bandit and
 - `ReportForge.Audit` persists sensitive operational actions for later review
 - `ReportForge.Maintenance` owns recurring cleanup and retention workflows
 - `ReportForge.Repo` persists organizations, API keys, reports, events, and artifacts in PostgreSQL
+- `ReportForge.ArtifactStorage` stores generated artifact bytes outside PostgreSQL while keeping metadata in the database
 - `ReportForge.Oban` schedules durable report jobs backed by PostgreSQL
-- `ReportForge.Metrics` emits Prometheus-compatible counters and gauges
+- `ReportForge.Telemetry` emits domain/runtime events consumed by `ReportForge.Metrics`
 
 Architecture detail lives in [docs/architecture/overview.md](./docs/architecture/overview.md) and [docs/diagrams/system-context.md](./docs/diagrams/system-context.md).
 
@@ -66,8 +67,8 @@ Architecture detail lives in [docs/architecture/overview.md](./docs/architecture
 | Language | Elixir 1.17 | Elixir remains the primary platform |
 | Async execution | Oban backed by PostgreSQL | tune queues, retries, recurring jobs, and backoff policies as workload grows |
 | Persistence | PostgreSQL with indexes, constraints, transactional state, and audit records | extend schema for archival and object-storage workflows |
-| Artifact delivery | signed PostgreSQL-backed downloads | MinIO or S3 object storage |
-| Observability | Logger, request IDs, correlation IDs, OpenTelemetry traces with OTLP export proof, Prometheus text metrics, Grafana JSON | official telemetry metrics pipeline, collector deployment wiring, and richer dashboards |
+| Artifact delivery | signed streaming downloads from local object storage with PostgreSQL metadata | MinIO or S3 adapter |
+| Observability | Logger, request IDs, correlation IDs, OpenTelemetry traces with OTLP export proof, `:telemetry` events, Prometheus text metrics, Grafana JSON | collector deployment wiring and richer dashboards |
 | Load testing | k6 scripts and benchmark plan | captured results under reproducible environments |
 
 ## Domain model
@@ -147,7 +148,7 @@ The current test suite covers:
 - audit persistence for tenant bootstrap, key management, downloads, and report mutations
 - retention-job and artifact-cleanup execution through Oban
 
-The next phases should add object-storage integration tests and more recovery scenarios around retries, cancellations, queue backpressure, and dependency outages.
+The next phases should add MinIO/S3 adapter integration tests and more recovery scenarios around retries, cancellations, queue backpressure, and dependency outages.
 
 ## Performance benchmarks
 
@@ -168,11 +169,12 @@ Operational visibility included in this slice:
 - `request_id` and `correlation_id` on every HTTP response
 - `traceparent` and `meta.trace_id` on every HTTP response
 - async trace propagation from request spans into report worker spans
-- per-request metrics and report counters in `/metrics`
+- `:telemetry` events for HTTP requests, report creation/completion/retry, and cleanup
+- per-request metrics and report counters derived into `/metrics`
 - `healthz` and `readyz` probes
 - report event timelines for operator debugging
 
-The next observability phase should add richer histograms, move metrics onto an official telemetry pipeline, and connect the shipped OTLP instrumentation to the target deployment collector.
+The next observability phase should add richer histograms and connect the shipped OTLP instrumentation to the target deployment collector.
 
 Current observability notes:
 
@@ -271,6 +273,7 @@ The repository explicitly models and documents these scenarios:
 - duplicate report creation with the same idempotency key
 - duplicate report submission via fingerprint-equivalent payloads
 - simulated upstream source timeouts
+- simulated object-storage write failures
 - signed artifact URL expiry
 - tenant attempts to read another tenant's report
 - rate-limited organization creation or report submission bursts
@@ -285,4 +288,4 @@ Operational guidance lives in [docs/runbooks/common-issues.md](./docs/runbooks/c
 2. Phase 2: PostgreSQL schema, durable report state, and OpenTelemetry request/worker trace correlation.
 3. Phase 3: Oban jobs, scheduled reports, cancellation safety, and persistence-backed retries.
 4. Phase 4: richer telemetry metrics, deployment collector integration, and key-rotation workflows.
-5. Phase 5: object storage, read-replica-aware exporters, XLSX/PDF adapters, and multi-file bundle templates.
+5. Phase 5: MinIO/S3 adapter, read-replica-aware exporters, XLSX/PDF adapters, and multi-file bundle templates.

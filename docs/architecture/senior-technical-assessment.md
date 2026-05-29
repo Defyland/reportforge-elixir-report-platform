@@ -58,7 +58,7 @@ The repository had strong docs and a shell validator, but more of the spec contr
 
 ### Artifact persistence was too coupled to the report context
 
-The first implementation persisted artifacts directly from `ReportForge.Reports`. That worked, but it made a future move to S3, MinIO, or another object backend more invasive than necessary. A senior slice should keep today’s simple PostgreSQL adapter while making the storage boundary explicit.
+The first implementation persisted artifacts directly from `ReportForge.Reports`. That worked, but it made a future move to S3, MinIO, or another object backend more invasive than necessary. A senior slice should keep database metadata transactional while moving artifact bytes behind a storage boundary.
 
 ### Async failures needed classified retry behavior
 
@@ -70,10 +70,13 @@ The worker could mark a report failed, but transient errors such as upstream tim
 - added [lib/report_forge/readiness.ex](../../lib/report_forge/readiness.ex) so readiness now checks database reachability, Oban availability, and signing-secret presence
 - updated [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex) so `/readyz` returns `503` when dependencies are not ready
 - hardened signed artifact responses in [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex) to return the stored artifact media type and `X-Content-Type-Options: nosniff`
-- added [lib/report_forge/artifact_storage.ex](../../lib/report_forge/artifact_storage.ex) and the PostgreSQL adapter in [lib/report_forge/artifact_storage/database.ex](../../lib/report_forge/artifact_storage/database.ex), keeping current behavior while isolating storage implementation details
+- added [lib/report_forge/artifact_storage.ex](../../lib/report_forge/artifact_storage.ex), [lib/report_forge/artifact_storage/local.ex](../../lib/report_forge/artifact_storage/local.ex), and the compatibility PostgreSQL adapter in [lib/report_forge/artifact_storage/database.ex](../../lib/report_forge/artifact_storage/database.ex)
+- moved artifact bytes out of PostgreSQL for the default runtime while keeping metadata, checksum, content type, storage key, and expiry in the database
 - moved report retry cleanup, download lookup, completion persistence, and maintenance expiry through the storage boundary
 - added concurrent idempotency and fingerprint tests in [test/report_forge/reports_test.exs](../../test/report_forge/reports_test.exs)
 - classified retryable report worker failures with Oban `max_attempts: 3`, deterministic backoff, and `report.retry_scheduled` lifecycle events
+- added response contract tests in [test/report_forge_web/openapi_contract_test.exs](../../test/report_forge_web/openapi_contract_test.exs), validating live JSON responses against `openapi.yaml`
+- added `:telemetry` events for HTTP requests, report lifecycle metrics, retries, and cleanup while preserving Prometheus output
 - added [test/report_forge/artifact_storage_test.exs](../../test/report_forge/artifact_storage_test.exs) and worker retry tests to prove the new contracts
 - extended [test/report_forge_web/router_test.exs](../../test/report_forge_web/router_test.exs) to prove the degraded-readiness path and the hardened download headers
 - updated [docs/architecture/observability.md](./observability.md), [docs/runbooks/common-issues.md](../runbooks/common-issues.md), and [openapi.yaml](../../openapi.yaml) to reflect the stricter runtime behavior

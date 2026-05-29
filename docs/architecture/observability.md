@@ -8,7 +8,8 @@
 - report lifecycle events persist `trace_id` and `span_id` for cross-request and async correlation
 - structured JSON log payloads are emitted through [lib/report_forge/observability.ex](../../lib/report_forge/observability.ex)
 - OTLP exporter wiring is configured through `:opentelemetry` and `:opentelemetry_exporter`
-- Prometheus-style metrics are exposed by [lib/report_forge/metrics.ex](../../lib/report_forge/metrics.ex)
+- runtime/domain events are emitted through [lib/report_forge/telemetry.ex](../../lib/report_forge/telemetry.ex)
+- Prometheus-style metrics are derived from telemetry events by [lib/report_forge/metrics.ex](../../lib/report_forge/metrics.ex)
 - explicit health check and readiness check endpoints exist in [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex), and readiness now validates PostgreSQL reachability, Oban availability, and signing-secret presence
 
 ## Current metric families
@@ -18,6 +19,8 @@
 - `reportforge_http_request_duration_ms_count`
 - `reportforge_reports_created_total`
 - `reportforge_reports_completed_total`
+- `reportforge_report_retries_total`
+- `reportforge_cleanup_runs_total`
 - `reportforge_report_duration_ms_sum`
 - `reportforge_report_duration_ms_count`
 - `reportforge_inflight_reports`
@@ -36,5 +39,5 @@ The initial Grafana dashboard definition lives in [grafana-dashboard.json](./gra
 
 ## Remaining gaps
 
-- metrics are custom text exposition, not yet emitted through an OpenTelemetry metric pipeline
+- metrics are exposed as custom Prometheus text, not yet exported through an OpenTelemetry metric pipeline
 - collector deployment, retention, and dashboarding are still environment-specific concerns outside the repository slice
