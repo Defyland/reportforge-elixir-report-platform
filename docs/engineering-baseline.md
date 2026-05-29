@@ -18,7 +18,7 @@ This repository targets the portfolio-wide standard from [`specs/general-project
 - bounded async lifecycle with progress and operator-visible events
 - signed artifact downloads and expiry semantics
 - isolation of tenant data across report reads and artifacts
-- migration path from PostgreSQL + Oban toward object storage, managed secrets, and cleanup workflows
+- explicit migration path from the current PostgreSQL artifact adapter toward object storage, managed secrets, and cleanup workflows
 
 ## Current slice boundary
 
@@ -26,9 +26,9 @@ The current slice is intentionally infrastructure-light:
 
 - PostgreSQL-backed storage for the main runtime path
 - Oban-backed durable execution
-- signed PostgreSQL-backed artifact delivery instead of S3 or MinIO
+- signed artifact delivery through a storage boundary backed by PostgreSQL today instead of S3 or MinIO
 
-Those are deliberate trade-offs to keep artifact storage simple while the queueing layer is already durable and restart-safe.
+Those are deliberate trade-offs to keep artifact storage simple while still making the future object-storage migration a localized adapter change.
 
 ## Review note
 

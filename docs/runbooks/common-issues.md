@@ -20,11 +20,26 @@ Likely cause in this slice:
 Meaning:
 
 - the report used the failure simulation path for an upstream query timeout
+- the worker treats this as transient and retries it before marking the report failed
 
 Action:
 
 - inspect report events
+- check for `report.retry_scheduled` events to confirm retry attempts were made
 - retry the report only after removing the simulated failure input
+
+## Report failed with `storage_unavailable`
+
+Meaning:
+
+- the artifact storage path was unavailable during generation
+- the worker treats this as transient and retries it before final failure
+
+Action:
+
+- call `GET /readyz` and confirm the database and signer checks are `up`
+- inspect report events for `report.retry_scheduled`
+- retry only after storage health has recovered
 
 ## Download URL returns `410`
 

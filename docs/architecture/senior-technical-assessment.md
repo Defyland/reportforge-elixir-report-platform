@@ -12,7 +12,7 @@ The strongest evidence is not one isolated feature, but the combination of:
 - transactional persistence and invariants in PostgreSQL-backed flows
 - durable async execution with Oban instead of a fragile in-memory worker path
 - operational concerns such as audit logs, traces, metrics, cleanup, and runbooks
-- tests across request, database, async, failure, and now repository-spec compliance layers
+- tests across request, database, async, concurrency, failure, and repository-spec compliance layers
 
 ## What already validates the author positively
 
@@ -26,6 +26,7 @@ The strongest evidence is not one isolated feature, but the combination of:
 
 - Report creation, lifecycle transitions, artifact persistence, and audit writes are modeled with transaction boundaries instead of best-effort chaining.
 - Idempotency and fingerprint deduplication are implemented as domain behavior, not just documented intentions.
+- Concurrent idempotency and fingerprint tests now prove the database constraints under race, not only the happy sequential path.
 - The schema and persistence tests prove that the author understands uniqueness, foreign keys, and rollback behavior.
 
 ### Operational maturity
@@ -55,12 +56,25 @@ The signed download flow worked, but the HTTP response path did not set the arti
 
 The repository had strong docs and a shell validator, but more of the spec contract needed to live inside ExUnit so regressions would fail in the main test suite instead of only during manual review.
 
+### Artifact persistence was too coupled to the report context
+
+The first implementation persisted artifacts directly from `ReportForge.Reports`. That worked, but it made a future move to S3, MinIO, or another object backend more invasive than necessary. A senior slice should keep today’s simple PostgreSQL adapter while making the storage boundary explicit.
+
+### Async failures needed classified retry behavior
+
+The worker could mark a report failed, but transient errors such as upstream timeouts and temporary storage unavailability were treated like terminal failures. That is not the behavior expected from a durable background execution system.
+
 ## What was changed in this review pass
 
 - added [test/report_forge/spec_compliance_test.exs](../../test/report_forge/spec_compliance_test.exs) to codify repository-level spec expectations in ExUnit
 - added [lib/report_forge/readiness.ex](../../lib/report_forge/readiness.ex) so readiness now checks database reachability, Oban availability, and signing-secret presence
 - updated [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex) so `/readyz` returns `503` when dependencies are not ready
 - hardened signed artifact responses in [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex) to return the stored artifact media type and `X-Content-Type-Options: nosniff`
+- added [lib/report_forge/artifact_storage.ex](../../lib/report_forge/artifact_storage.ex) and the PostgreSQL adapter in [lib/report_forge/artifact_storage/database.ex](../../lib/report_forge/artifact_storage/database.ex), keeping current behavior while isolating storage implementation details
+- moved report retry cleanup, download lookup, completion persistence, and maintenance expiry through the storage boundary
+- added concurrent idempotency and fingerprint tests in [test/report_forge/reports_test.exs](../../test/report_forge/reports_test.exs)
+- classified retryable report worker failures with Oban `max_attempts: 3`, deterministic backoff, and `report.retry_scheduled` lifecycle events
+- added [test/report_forge/artifact_storage_test.exs](../../test/report_forge/artifact_storage_test.exs) and worker retry tests to prove the new contracts
 - extended [test/report_forge_web/router_test.exs](../../test/report_forge_web/router_test.exs) to prove the degraded-readiness path and the hardened download headers
 - updated [docs/architecture/observability.md](./observability.md), [docs/runbooks/common-issues.md](../runbooks/common-issues.md), and [openapi.yaml](../../openapi.yaml) to reflect the stricter runtime behavior
 
@@ -73,3 +87,5 @@ The review changes above sharpen that judgment in the places where senior code i
 - probes must prove something real
 - HTTP responses must preserve contract semantics precisely
 - repository standards should be executable, not only described
+- durable workers should distinguish retryable operational failures from terminal domain failures
+- replaceable infrastructure boundaries should exist before the implementation is forced to migrate

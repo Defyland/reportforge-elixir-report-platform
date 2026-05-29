@@ -200,7 +200,7 @@ Security detail:
 
 - The current HTTP layer uses Bandit + Plug instead of Phoenix because the first vertical slice benefits more from small surface area than from framework breadth.
 - PostgreSQL-backed state raises the local setup bar slightly, but it gives the slice transactional correctness and durable read models now.
-- Oban now covers both report execution and recurring cleanup, but queue partitioning and long-horizon retry policy are still intentionally minimal in this slice.
+- Oban covers report execution, transient failure retries with backoff, and recurring cleanup; queue partitioning is still intentionally minimal in this slice.
 - ZIP exports are modeled early because packaging multiple views is central to the product story.
 
 The main decisions are recorded in:

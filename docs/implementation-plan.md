@@ -21,12 +21,12 @@ This document audits the current repository against [`specs/general-project-spec
 | CI workflow | Done | [.github/workflows/ci.yml](../.github/workflows/ci.yml), local `mix ci` pass, explicit jobs for lint/format/tests/security/OpenAPI/coverage/docker | Watch for the first green GitHub Actions run after push |
 | Unit / request / auth / failure tests | Done | [test](../test/), local `mix test` pass | Expand coverage as new runtime layers land |
 | Database tests | Done | [ReportForge.Repo](../../lib/report_forge/repo.ex), [migrations](../../priv/repo/migrations/), [test/report_forge/persistence_test.exs](../../test/report_forge/persistence_test.exs), [test/report_forge/audit_test.exs](../../test/report_forge/audit_test.exs), [test/report_forge/maintenance/cleanup_worker_test.exs](../../test/report_forge/maintenance/cleanup_worker_test.exs), local `mix test --only db` and `mix ci` pass with ephemeral PostgreSQL | Expand coverage when object storage or archival flows land |
-| Messaging tests | Done | [test/report_forge/reports/worker_test.exs](../../test/report_forge/reports/worker_test.exs), [test/report_forge/reports_test.exs](../../test/report_forge/reports_test.exs), [test/report_forge/maintenance/cleanup_worker_test.exs](../../test/report_forge/maintenance/cleanup_worker_test.exs) cover enqueueing, draining, retry/cancel flow, and recurring async cleanup | Add broker-specific tests only if a broker is introduced later |
+| Messaging tests | Done | [test/report_forge/reports/worker_test.exs](../../test/report_forge/reports/worker_test.exs), [test/report_forge/reports_test.exs](../../test/report_forge/reports_test.exs), and [test/report_forge/maintenance/cleanup_worker_test.exs](../../test/report_forge/maintenance/cleanup_worker_test.exs) cover enqueueing, draining, retry/cancel flow, classified transient retries, backoff, and recurring async cleanup | Add broker-specific tests only if a broker is introduced later |
 | Performance tests | Done | [benchmarks](../benchmarks/), [benchmarks/baseline.md](../benchmarks/baseline.md), and [benchmarks/results/2026-05-29](../benchmarks/results/2026-05-29/README.md) | Rerun under Docker or CI once available |
 | Observability baseline | Done | structured logs, request/correlation IDs, `/metrics`, health/readiness probes, Grafana dashboard, OpenTelemetry request + worker traces, persisted trace metadata, and OTLP export proof in [test/report_forge/otlp_export_test.exs](../../test/report_forge/otlp_export_test.exs) | Evolve metric families as the product grows |
 | Security baseline | Done | threat model, authorization matrix, API-key auth, rate limiting, input validation, tenant isolation, env-based secret management, persistent audit logs, local Sobelow pass | Add external secret-manager integration only if the deployment target requires it |
 | Messaging baseline topology | Done | current async architecture uses PostgreSQL + Oban rather than RabbitMQ or another external broker, so the broker-topology subsection of the spec is not applicable to the shipped runtime | If a broker is introduced later, add exchanges, queues, DLQ, retry, idempotency, ack, and correlation-ID documentation plus tests |
-| Data and transaction baseline | Done | [docs/architecture/database-design.md](./architecture/database-design.md), [lib/report_forge/identity.ex](../../lib/report_forge/identity.ex), [lib/report_forge/reports.ex](../../lib/report_forge/reports.ex), [lib/report_forge/audit.ex](../../lib/report_forge/audit.ex), [lib/report_forge/maintenance.ex](../../lib/report_forge/maintenance.ex), migrations, transaction test rollback proof | Extend the schema only as later phases introduce object storage or archival flows |
+| Data and transaction baseline | Done | [docs/architecture/database-design.md](./architecture/database-design.md), [lib/report_forge/identity.ex](../../lib/report_forge/identity.ex), [lib/report_forge/reports.ex](../../lib/report_forge/reports.ex), [lib/report_forge/artifact_storage.ex](../../lib/report_forge/artifact_storage.ex), [lib/report_forge/audit.ex](../../lib/report_forge/audit.ex), [lib/report_forge/maintenance.ex](../../lib/report_forge/maintenance.ex), migrations, transaction test rollback proof, and concurrent deduplication tests | Extend the schema only as later phases introduce object storage or archival flows |
 | Commit history standard | Done | [git log](../../.git) on branch `codex/reportforge-implementation` now shows atomic Conventional Commits for tooling, core runtime, and documentation/benchmark evidence | Keep future changes equally atomic |
 | Docker build validation | Done | [.github/workflows/ci.yml](../.github/workflows/ci.yml) includes an explicit `docker build` job and [Dockerfile](../Dockerfile) is versioned | Local ad-hoc proof still depends on a running Docker daemon |
 
@@ -68,7 +68,7 @@ Completed evidence:
 - the main runtime path in [ReportForge.Identity](../../lib/report_forge/identity.ex) and [ReportForge.Reports](../../lib/report_forge/reports.ex) reads and writes PostgreSQL directly
 - lifecycle events and artifacts are persisted transactionally
 - request tests and dedicated DB tests both exercise the durable path
-- local `mix ci` passes against an ephemeral PostgreSQL instance with `80.02%` coverage
+- local `mix ci` passes against an ephemeral PostgreSQL instance with `80.47%` coverage
 
 Remaining work:
 
@@ -85,10 +85,12 @@ Completed evidence:
 - [lib/report_forge/reports/worker.ex](../../lib/report_forge/reports/worker.ex) is now an `Oban.Worker`
 - [priv/repo/migrations/20260529030000_add_oban_and_report_execution_jobs.exs](../../priv/repo/migrations/20260529030000_add_oban_and_report_execution_jobs.exs) installs Oban tables and report job tracking
 - [lib/report_forge/reports.ex](../../lib/report_forge/reports.ex) persists `execution_job_id` and wires create, cancel, and retry to durable jobs
+- [lib/report_forge/reports/worker.ex](../../lib/report_forge/reports/worker.ex) classifies transient execution failures, schedules retries through Oban attempts, and records `report.retry_scheduled` events
 - [lib/report_forge/maintenance/cleanup_worker.ex](../../lib/report_forge/maintenance/cleanup_worker.ex) runs recurring cleanup through Oban cron queues
 - [test/report_forge/reports_test.exs](../../test/report_forge/reports_test.exs), [test/report_forge/reports/worker_test.exs](../../test/report_forge/reports/worker_test.exs), and [test/support/case.ex](../../test/support/case.ex) prove enqueueing and queue draining through Oban
 - [test/report_forge/maintenance/cleanup_worker_test.exs](../../test/report_forge/maintenance/cleanup_worker_test.exs) proves artifact cleanup and retention deletion through Oban
 - local `mix ci` passes with the Oban-backed execution path enabled
+- concurrent idempotency and fingerprint tests prove report deduplication under racing requests
 
 Remaining work:
 
@@ -106,7 +108,7 @@ Completed evidence:
 - [lib/report_forge/reports/report_event.ex](../../lib/report_forge/reports/report_event.ex) persists `trace_id` and `span_id` on lifecycle events
 - request and worker trace assertions exist in [test/report_forge_web/router_test.exs](../../test/report_forge_web/router_test.exs) and [test/report_forge/reports/worker_test.exs](../../test/report_forge/reports/worker_test.exs)
 - [test/report_forge/otlp_export_test.exs](../../test/report_forge/otlp_export_test.exs) validates OTLP trace export end-to-end against a local collector stub
-- local `mix ci` passes with the tracing path enabled and `80.02%` total coverage
+- local `mix ci` passes with the tracing path enabled and `80.47%` total coverage
 
 Remaining work:
 
@@ -162,15 +164,18 @@ Remaining work:
 - added an automated baseline validation script and CI step
 - extended tests with async lifecycle, validation, cancellation/retry, and rate-limit coverage
 - updated README, diagrams, runbooks, ADRs, and the implementation plan to reflect the PostgreSQL + Oban runtime that is actually shipping
-- ended this gate at `80.02%` total coverage with the Oban path enabled
+- ended this gate at `80.47%` total coverage with the Oban path enabled
 - added audit-style structured log events for tenant and report actions
-- reran the full gate with `mix ci`, `bash scripts/validate_requirements.sh`, and `redocly lint`, ending with `26` tests passing, `80.02%` total coverage, and `3` non-blocking OpenAPI warnings
+- reran the full gate with `mix ci`, `bash scripts/validate_requirements.sh`, and `redocly lint`, ending with `38` tests passing, `80.47%` total coverage, and `3` non-blocking OpenAPI warnings
 - captured dated benchmark evidence under [benchmarks/results/2026-05-29](../benchmarks/results/2026-05-29/README.md), including a rate-limit failure mode and a benchmark-tuned passing load profile
 - made tenant rate limits configurable by environment so benchmark runs can isolate queue and persistence behavior without changing product defaults
 - added persistent audit storage for privileged tenant and report actions, backed by dedicated tests
 - added recurring artifact-expiry cleanup and tenant-retention deletion through Oban, backed by dedicated tests
 - added runtime signing-secret support via `SIGNING_SECRET` or `SIGNING_SECRET_FILE`
 - added [test/report_forge/otlp_export_test.exs](../../test/report_forge/otlp_export_test.exs) to prove OTLP trace export against a local collector stub
+- added an explicit artifact-storage boundary with a PostgreSQL adapter and tests
+- added concurrent idempotency and fingerprint deduplication tests
+- added classified Oban retries with backoff for transient report worker failures
 - split the work into atomic Conventional Commits on branch `codex/reportforge-implementation`
 
 ## Blockers that still prevent full completion
