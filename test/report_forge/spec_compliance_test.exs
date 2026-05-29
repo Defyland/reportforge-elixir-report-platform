@@ -72,7 +72,10 @@ defmodule ReportForge.SpecComplianceTest do
     "mix ecto.create && mix ecto.migrate",
     "mix test --cover",
     "mix test --only db",
-    "actions/upload-artifact@v4",
+    "actions/checkout@v6",
+    "actions/setup-node@v6",
+    "actions/upload-artifact@v7",
+    "DavidAnson/markdownlint-cli2-action@v23",
     "@redocly/cli@latest lint openapi.yaml",
     "docker build -t reportforge-ci ."
   ]
