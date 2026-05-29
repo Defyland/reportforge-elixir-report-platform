@@ -1,0 +1,5 @@
+samples=50
+max_cpu_pct=103.00
+avg_cpu_pct=39.34
+max_rss_kb=83792
+avg_rss_kb=63820.80

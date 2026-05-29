@@ -1,26 +1,31 @@
 # ReportForge Engineering Baseline
 
-This repository follows the initiative-wide standards below.
+This repository targets the portfolio-wide standard from [`specs/general-project-spec.md`](../../specs/general-project-spec.md) and translates it into ReportForge-specific engineering outcomes.
 
 ## Mandatory outcomes
 
-- Product-grade `README.md` with product and engineering sections
-- `openapi.yaml` once the HTTP surface exists
-- `docs/adr/`, `docs/architecture/`, `docs/benchmarks/`, `docs/api/`, `docs/diagrams/`, and `docs/runbooks/`
-- atomic Conventional Commit history
-- GitHub Actions for lint, tests, security, build, coverage, and OpenAPI validation
-- observability with structured logs, metrics, traces, request IDs, and readiness endpoints
-- documented k6 performance baselines
+- product-grade `README.md` with product and engineering sections
+- versioned `openapi.yaml`
+- `docs/adr/`, `docs/api/`, `docs/architecture/`, `docs/benchmarks/`, `docs/diagrams/`, and `docs/runbooks/`
+- CI workflow for formatting, linting, tests, Docker validation, and OpenAPI validation
+- tests across auth, request flow, lifecycle, and failure scenarios
+- Prometheus-style metrics, request IDs, correlation IDs, and health probes
+- benchmark plan and k6 scenarios
 
 ## ReportForge-specific emphasis
 
-- streaming exporters that avoid loading full datasets into memory
-- explicit report lifecycle, cancellation, retry, and expiry semantics
-- idempotency keys and fingerprint-based deduplication
-- object-storage upload and signed-download flows with retry safety
-- read-replica-aware query strategy for heavy report generation
-- progress telemetry and operational visibility for long-running jobs
+- report idempotency and fingerprint-based deduplication
+- bounded async lifecycle with progress and operator-visible events
+- signed artifact downloads and expiry semantics
+- isolation of tenant data across report reads and artifacts
+- migration path from PostgreSQL + Oban toward object storage, managed secrets, and cleanup workflows
 
-## Phase 0 boundary
+## Current slice boundary
 
-This repository intentionally stops before scaffolding Phoenix, background jobs, or storage integrations. The goal of this phase is only to lock scope and standards.
+The current slice is intentionally infrastructure-light:
+
+- PostgreSQL-backed storage for the main runtime path
+- Oban-backed durable execution
+- signed PostgreSQL-backed artifact delivery instead of S3 or MinIO
+
+Those are deliberate trade-offs to keep artifact storage simple while the queueing layer is already durable and restart-safe.

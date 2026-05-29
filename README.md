@@ -1,44 +1,287 @@
 # ReportForge
 
-Massive financial reporting platform built in Elixir to showcase stream-first exports and long-running job execution.
+ReportForge is an Elixir-based reporting platform for finance and operations teams that need large CSV, JSON, and ZIP exports without blocking transactional systems.
 
-## Status
+> Status: executable slice with PostgreSQL-backed runtime, Oban-backed async execution, persistent audit logs, recurring cleanup jobs, and request-to-worker trace correlation. The repository now includes an HTTP API, tenant API keys, asynchronous report execution with signed downloads, transactional persistence, OpenTelemetry spans, request tests, operational docs, and CI scaffolding. Object storage, collector-backed telemetry validation, and external secret-manager integration remain the main next steps.
 
-Phase 0 bootstrap only. This repository currently establishes naming, scope, documentation structure, and engineering expectations. It does not yet contain a Phoenix application, Oban workers, or storage integration scaffolding.
+Gap audit and remaining work: [docs/implementation-plan.md](./docs/implementation-plan.md)
 
-## Product intent
+## What is this product?
 
-ReportForge is planned as an asynchronous reporting platform for large financial exports, focused on generating CSV, JSON, ZIP, and later XLSX or PDF outputs without exhausting memory or impacting the primary transactional application.
+ReportForge is the backend service behind bulk financial reporting workflows such as cash-position snapshots, ledger summaries, and invoice audits. It accepts report requests, deduplicates repeated submissions, runs the generation pipeline asynchronously, records lifecycle events, and exposes signed download URLs for the resulting artifacts.
 
-## Planned stack
+## Problem it solves
 
-- Elixir
-- Phoenix API
-- PostgreSQL
-- Oban
-- MinIO or S3
-- OpenTelemetry
-- Prometheus and Grafana
-- Docker Compose
-- k6
+Financial exports are expensive because they combine wide datasets, tenant isolation rules, long-running queries, and large file generation. In many systems those exports either run inline and hurt the main application or they are pushed to ad-hoc batch code with weak observability and poor retry semantics.
 
-## Engineering focus
+ReportForge solves that by making report generation explicit:
 
-This project is meant to demonstrate:
+- asynchronous report creation with lifecycle tracking
+- tenant-scoped API key authentication
+- idempotency keys and fingerprint-based deduplication
+- signed download URLs with expiry
+- event history for each report request
+- operational endpoints, metrics, and failure-oriented documentation
 
-- stream-first file generation with bounded memory usage
-- long-running jobs with retry, cancellation, and supervision
-- progress tracking and report lifecycle control
-- object-storage upload flows without materializing large files in RAM
-- idempotent report creation and deduplication
-- performance and failure testing for large exports
+## Target users
 
-## Bootstrap contents
+- treasury and finance operations teams exporting balance and ledger views
+- internal data operations teams handling audit and reconciliation flows
+- platform engineers who need a reference backend for async export orchestration
+- support and reliability teams investigating delayed or failed report runs
 
-- repository initialized and synchronized with GitHub
-- mandatory documentation folders created
-- baseline engineering spec captured in `docs/engineering-baseline.md`
+## Main features
 
-## Next phase
+- tenant registration with bootstrap API keys
+- API-key-authenticated report creation and lookup
+- async execution pipeline backed by PostgreSQL state and Oban
+- `cash_position`, `ledger_summary`, and `invoice_audit` templates
+- CSV, JSON, and ZIP output generation
+- report cancellation, retry, progress, and event history
+- signed artifact downloads with TTL enforcement
+- persistent audit logs for privileged and report-sensitive actions
+- recurring artifact-expiry cleanup and tenant-retention deletion jobs
+- Prometheus-style metrics, request IDs, correlation IDs, and OpenTelemetry trace IDs
 
-The first implementation slice should prioritize report requests, lifecycle states, CSV and JSON streaming, ZIP packaging, progress telemetry, storage upload, and idempotency controls.
+## Architecture overview
+
+The current implementation is a lightweight Elixir service built with Bandit and Plug instead of a full Phoenix stack. That keeps the first executable slice small while still exposing a realistic HTTP contract and async orchestration behavior.
+
+- `ReportForgeWeb.Router` is the HTTP edge
+- `ReportForge.Identity` owns tenant registration and API-key authentication
+- `ReportForge.Reports` owns report lifecycle, deduplication, and signed artifacts
+- `ReportForge.Audit` persists sensitive operational actions for later review
+- `ReportForge.Maintenance` owns recurring cleanup and retention workflows
+- `ReportForge.Repo` persists organizations, API keys, reports, events, and artifacts in PostgreSQL
+- `ReportForge.Oban` schedules durable report jobs backed by PostgreSQL
+- `ReportForge.Metrics` emits Prometheus-compatible counters and gauges
+
+Architecture detail lives in [docs/architecture/overview.md](./docs/architecture/overview.md) and [docs/diagrams/system-context.md](./docs/diagrams/system-context.md).
+
+## Tech stack
+
+| Component | Current choice | Planned upgrade path |
+| --- | --- | --- |
+| HTTP server | Bandit + Plug | Phoenix API surface if the repo grows into richer auth/admin flows |
+| Language | Elixir 1.17 | Elixir remains the primary platform |
+| Async execution | Oban backed by PostgreSQL | tune queues, retries, recurring jobs, and backoff policies as workload grows |
+| Persistence | PostgreSQL with indexes, constraints, transactional state, and audit records | extend schema for archival and object-storage workflows |
+| Artifact delivery | signed PostgreSQL-backed downloads | MinIO or S3 object storage |
+| Observability | Logger, request IDs, correlation IDs, OpenTelemetry traces, Prometheus text metrics, Grafana JSON | collector-backed exports, official telemetry metrics pipeline, and richer dashboards |
+| Load testing | k6 scripts and benchmark plan | captured results under reproducible environments |
+
+## Domain model
+
+Core entities:
+
+- `Organization`: tenant boundary, retention policy, and auth scope
+- `ApiKey`: tenant credential with prefix, hashed secret, and revocation state
+- `Report`: async export aggregate with lifecycle, filters, and artifact metadata
+- `ReportEvent`: immutable lifecycle event stream for a report request
+- `Artifact`: signed downloadable output metadata plus binary payload stored in PostgreSQL for the current slice
+
+See [docs/architecture/domain-model.md](./docs/architecture/domain-model.md) for invariants and lifecycle ownership.
+
+## API documentation
+
+The versioned HTTP contract is defined in [openapi.yaml](./openapi.yaml).
+
+Supporting API docs:
+
+- [docs/api/http-examples.md](./docs/api/http-examples.md)
+- [docs/api/error-format.md](./docs/api/error-format.md)
+
+Implemented endpoints:
+
+- `POST /api/v1/organizations`
+- `GET /api/v1/organizations/me`
+- `GET /api/v1/api-keys`
+- `POST /api/v1/api-keys`
+- `DELETE /api/v1/api-keys/{id}`
+- `GET /api/v1/reports`
+- `POST /api/v1/reports`
+- `GET /api/v1/reports/{id}`
+- `GET /api/v1/reports/{id}/events`
+- `GET /api/v1/reports/{id}/download`
+- `POST /api/v1/reports/{id}/cancel`
+- `POST /api/v1/reports/{id}/retry`
+- `GET /downloads/{token}`
+- `GET /healthz`
+- `GET /readyz`
+- `GET /metrics`
+
+## Async or event architecture
+
+ReportForge treats report generation as an explicit asynchronous workflow:
+
+1. `POST /api/v1/reports` records a queued report and a `report.requested` event.
+2. An Oban job transitions the report to `running`.
+3. The generator emits progress events as it simulates query completion and artifact staging.
+4. The report transitions to `succeeded`, `failed`, or `cancelled`.
+5. Successful runs issue a signed artifact URL with expiry metadata.
+
+The lifecycle sequence is documented in [docs/diagrams/report-lifecycle-sequence.md](./docs/diagrams/report-lifecycle-sequence.md).
+
+## Database design
+
+The current executable slice now runs on PostgreSQL and uses transactional persistence in the main request path:
+
+- `organizations`, `api_keys`, `reports`, `report_events`, `report_artifacts`, and `audit_logs`
+- unique constraints on tenant slug, API key prefix, and report idempotency keys
+- fingerprint indexes to support deduplication
+- event ordering per report
+- cleanup indexes and scheduled retention workflows for reports and artifacts
+
+See [docs/architecture/database-design.md](./docs/architecture/database-design.md).
+
+## Testing strategy
+
+The current test suite covers:
+
+- organization registration and API-key authentication
+- report idempotency and deduplication
+- successful artifact creation and signed downloads
+- failure simulation for upstream timeouts
+- request-level auth and tenant isolation
+- report event visibility and lifecycle assertions
+- audit persistence for tenant bootstrap, key management, downloads, and report mutations
+- retention-job and artifact-cleanup execution through Oban
+
+The next phases should add object-storage integration tests and more recovery scenarios around retries, cancellations, queue backpressure, and dependency outages.
+
+## Performance benchmarks
+
+The repository ships benchmark planning and k6 scenarios for smoke, load, stress, and spike profiles.
+
+- baseline plan: [benchmarks/baseline.md](./benchmarks/baseline.md)
+- methodology: [docs/benchmarks/methodology.md](./docs/benchmarks/methodology.md)
+- results status: [docs/benchmarks/results-status.md](./docs/benchmarks/results-status.md)
+- results folder: [benchmarks/results/README.md](./benchmarks/results/README.md)
+
+The current slice now has a first measured benchmark capture under [benchmarks/results/2026-05-29](./benchmarks/results/2026-05-29/README.md), including a default-limit load failure mode and a benchmark-tuned profile.
+
+## Observability
+
+Operational visibility included in this slice:
+
+- structured JSON log bodies through `ReportForge.Observability`
+- `request_id` and `correlation_id` on every HTTP response
+- `traceparent` and `meta.trace_id` on every HTTP response
+- async trace propagation from request spans into report worker spans
+- per-request metrics and report counters in `/metrics`
+- `healthz` and `readyz` probes
+- report event timelines for operator debugging
+
+The next observability phase should validate collector-backed exports, add richer histograms, and move metrics onto an official telemetry pipeline.
+
+Current observability notes:
+
+- [docs/architecture/observability.md](./docs/architecture/observability.md)
+- [docs/architecture/grafana-dashboard.json](./docs/architecture/grafana-dashboard.json)
+
+## Security considerations
+
+- every authenticated API is scoped by tenant API key
+- secrets are stored as SHA-256 digests, not plain text
+- signed artifact URLs expire after a configurable TTL
+- signing secrets can be sourced from `SIGNING_SECRET` or `SIGNING_SECRET_FILE`
+- rate limiting protects public organization creation and tenant read/write traffic
+- request validation rejects unsupported template, format, and payload shapes
+- tenant isolation is enforced across report reads, events, and downloads
+- privileged actions such as key issuance, key revocation, report retry, cancellation, and downloads are recorded in persistent audit logs
+- future phases should move runtime secrets to an external managed secret store and add first-class key rotation workflows
+
+Security detail:
+
+- [docs/architecture/threat-model.md](./docs/architecture/threat-model.md)
+- [docs/api/authorization-matrix.md](./docs/api/authorization-matrix.md)
+
+## Trade-offs and decisions
+
+- The current HTTP layer uses Bandit + Plug instead of Phoenix because the first vertical slice benefits more from small surface area than from framework breadth.
+- PostgreSQL-backed state raises the local setup bar slightly, but it gives the slice transactional correctness and durable read models now.
+- Oban now covers both report execution and recurring cleanup, but queue partitioning and long-horizon retry policy are still intentionally minimal in this slice.
+- ZIP exports are modeled early because packaging multiple views is central to the product story.
+
+The main decisions are recorded in:
+
+- [docs/adr/0001-plug-first-executable-slice.md](./docs/adr/0001-plug-first-executable-slice.md)
+- [docs/adr/0002-deduplication-and-signed-downloads.md](./docs/adr/0002-deduplication-and-signed-downloads.md)
+- [docs/adr/0003-task-supervisor-before-oban.md](./docs/adr/0003-task-supervisor-before-oban.md)
+- [docs/adr/0004-adopt-oban-for-durable-execution.md](./docs/adr/0004-adopt-oban-for-durable-execution.md)
+
+## How to run locally
+
+Run the API directly with Mix:
+
+```sh
+bash scripts/start_local_postgres.sh
+REPORT_FORGE_DB_PORT=55432 mix setup
+REPORT_FORGE_DB_PORT=55432 mix run --no-halt
+```
+
+The service listens on `http://localhost:4000` by default. Override with environment variables:
+
+```sh
+PORT=4100 BASE_URL=http://localhost:4100 REPORT_FORGE_DB_PORT=55432 mix run --no-halt
+```
+
+Or build and run the container:
+
+```sh
+docker build -t reportforge .
+docker run --rm -p 4000:4000 reportforge
+```
+
+## How to run tests
+
+Run the Elixir suite:
+
+```sh
+bash scripts/start_local_postgres.sh
+REPORT_FORGE_DB_PORT=55432 mix test
+```
+
+Run the database integration tests with a local ephemeral PostgreSQL instance:
+
+```sh
+bash scripts/start_local_postgres.sh
+REPORT_FORGE_DB_PORT=55432 mix ecto.create
+REPORT_FORGE_DB_PORT=55432 mix ecto.migrate
+REPORT_FORGE_DB_PORT=55432 mix test --only db
+```
+
+Run the full repository checks:
+
+```sh
+REPORT_FORGE_DB_PORT=55432 mix ci
+```
+
+Validate the OpenAPI contract:
+
+```sh
+npx @redocly/cli@latest lint openapi.yaml
+```
+
+## Failure scenarios
+
+The repository explicitly models and documents these scenarios:
+
+- duplicate report creation with the same idempotency key
+- duplicate report submission via fingerprint-equivalent payloads
+- simulated upstream source timeouts
+- signed artifact URL expiry
+- tenant attempts to read another tenant's report
+- rate-limited organization creation or report submission bursts
+- cancellation during queued or running work
+- retry of terminal reports after failure or cancellation
+
+Operational guidance lives in [docs/runbooks/common-issues.md](./docs/runbooks/common-issues.md).
+
+## Roadmap
+
+1. Phase 1: executable HTTP slice with auth, async report lifecycle, signed downloads, tests, and docs.
+2. Phase 2: PostgreSQL schema, durable report state, and OpenTelemetry request/worker trace correlation.
+3. Phase 3: Oban jobs, scheduled reports, cancellation safety, and persistence-backed retries.
+4. Phase 4: collector-backed telemetry validation, Docker/CI runtime proof, and external secret-manager integration.
+5. Phase 5: object storage, read-replica-aware exporters, XLSX/PDF adapters, and multi-file bundle templates.
