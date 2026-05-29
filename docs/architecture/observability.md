@@ -32,8 +32,9 @@ The initial dashboard definition lives in [grafana-dashboard.json](./grafana-das
 - the report events API exposes the same `trace_id` across `report.requested`, `report.started`, progress, and `report.completed`
 - worker spans use a different `span_id` from the request span while staying inside the same trace
 - this behavior is covered by [test/report_forge_web/router_test.exs](../../test/report_forge_web/router_test.exs) and [test/report_forge/reports/worker_test.exs](../../test/report_forge/reports/worker_test.exs)
+- exported OTLP traces are validated end-to-end by [test/report_forge/otlp_export_test.exs](../../test/report_forge/otlp_export_test.exs), which boots a local collector stub, forces OTLP export, and decodes the emitted protobuf payload
 
 ## Remaining gaps
 
-- no validated collector deployment or exported trace proof outside local tests
 - metrics are custom text exposition, not yet emitted through an OpenTelemetry metric pipeline
+- collector deployment, retention, and dashboarding are still environment-specific concerns outside the repository slice

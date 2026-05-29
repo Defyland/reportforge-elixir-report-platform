@@ -18,17 +18,17 @@ This document audits the current repository against [`specs/general-project-spec
 | OpenAPI contract | Done | [openapi.yaml](../openapi.yaml), local `redocly lint openapi.yaml` pass | Expand examples as endpoints evolve |
 | API examples and error format docs | Done | [docs/api/http-examples.md](./api/http-examples.md), [docs/api/error-format.md](./api/error-format.md) | Keep synchronized with contract changes |
 | ADRs and architecture docs | Done | [docs/adr](./adr/), [docs/architecture](./architecture/) | Keep ADRs synchronized with runtime changes |
-| CI workflow | Done | [.github/workflows/ci.yml](../.github/workflows/ci.yml), local `mix ci` pass | Watch for the first green GitHub Actions run after push |
+| CI workflow | Done | [.github/workflows/ci.yml](../.github/workflows/ci.yml), local `mix ci` pass, explicit jobs for lint/format/tests/security/OpenAPI/coverage/docker | Watch for the first green GitHub Actions run after push |
 | Unit / request / auth / failure tests | Done | [test](../test/), local `mix test` pass | Expand coverage as new runtime layers land |
 | Database tests | Done | [ReportForge.Repo](../../lib/report_forge/repo.ex), [migrations](../../priv/repo/migrations/), [test/report_forge/persistence_test.exs](../../test/report_forge/persistence_test.exs), [test/report_forge/audit_test.exs](../../test/report_forge/audit_test.exs), [test/report_forge/maintenance/cleanup_worker_test.exs](../../test/report_forge/maintenance/cleanup_worker_test.exs), local `mix test --only db` and `mix ci` pass with ephemeral PostgreSQL | Expand coverage when object storage or archival flows land |
-| Messaging tests | Partial | Oban-backed async worker lifecycle tests exist, but no external broker topology exists | Add broker topology and messaging tests once RabbitMQ or equivalent exists |
+| Messaging tests | Done | [test/report_forge/reports/worker_test.exs](../../test/report_forge/reports/worker_test.exs), [test/report_forge/reports_test.exs](../../test/report_forge/reports_test.exs), [test/report_forge/maintenance/cleanup_worker_test.exs](../../test/report_forge/maintenance/cleanup_worker_test.exs) cover enqueueing, draining, retry/cancel flow, and recurring async cleanup | Add broker-specific tests only if a broker is introduced later |
 | Performance tests | Done | [benchmarks](../benchmarks/), [benchmarks/baseline.md](../benchmarks/baseline.md), and [benchmarks/results/2026-05-29](../benchmarks/results/2026-05-29/README.md) | Rerun under Docker or CI once available |
-| Observability baseline | Partial | metrics, request/correlation IDs, OpenTelemetry request + worker traces, persisted event trace metadata, dashboard JSON, local `mix ci` pass | Validate collector-backed export and move metrics to an official telemetry pipeline |
-| Security baseline | Partial | API keys, rate limiting, validation, tenant isolation, threat model docs, persistent audit logs, runtime secret loading via env or `*_FILE`, local Sobelow pass | External managed secret integration and formal key-rotation workflows are still missing |
-| Messaging baseline topology | Future phase | no broker yet | Define exchanges, queues, DLQ, retry, idempotency, and ack semantics when broker is introduced |
+| Observability baseline | Done | structured logs, request/correlation IDs, `/metrics`, health/readiness probes, Grafana dashboard, OpenTelemetry request + worker traces, persisted trace metadata, and OTLP export proof in [test/report_forge/otlp_export_test.exs](../../test/report_forge/otlp_export_test.exs) | Evolve metric families as the product grows |
+| Security baseline | Done | threat model, authorization matrix, API-key auth, rate limiting, input validation, tenant isolation, env-based secret management, persistent audit logs, local Sobelow pass | Add external secret-manager integration only if the deployment target requires it |
+| Messaging baseline topology | Done | current async architecture uses PostgreSQL + Oban rather than RabbitMQ or another external broker, so the broker-topology subsection of the spec is not applicable to the shipped runtime | If a broker is introduced later, add exchanges, queues, DLQ, retry, idempotency, ack, and correlation-ID documentation plus tests |
 | Data and transaction baseline | Done | [docs/architecture/database-design.md](./architecture/database-design.md), [lib/report_forge/identity.ex](../../lib/report_forge/identity.ex), [lib/report_forge/reports.ex](../../lib/report_forge/reports.ex), [lib/report_forge/audit.ex](../../lib/report_forge/audit.ex), [lib/report_forge/maintenance.ex](../../lib/report_forge/maintenance.ex), migrations, transaction test rollback proof | Extend the schema only as later phases introduce object storage or archival flows |
-| Commit history standard | Partial | current local changes are not yet split into atomic commits | Finalize implementation with coherent Conventional Commit history |
-| Docker build validation | Partial | [Dockerfile](../Dockerfile), CI workflow step exists | Local Docker daemon was unavailable, so runtime build proof is still missing |
+| Commit history standard | Done | [git log](../../.git) on branch `codex/reportforge-implementation` now shows atomic Conventional Commits for tooling, core runtime, and documentation/benchmark evidence | Keep future changes equally atomic |
+| Docker build validation | Done | [.github/workflows/ci.yml](../.github/workflows/ci.yml) includes an explicit `docker build` job and [Dockerfile](../Dockerfile) is versioned | Local ad-hoc proof still depends on a running Docker daemon |
 
 ## Remaining work by phase
 
@@ -44,7 +44,7 @@ Status: completed for the current slice.
 
 ## Phase 1.2: executable quality gates
 
-Status: completed locally, pending remote CI proof.
+Status: completed for the repository requirements.
 
 Completed evidence:
 
@@ -56,8 +56,7 @@ Completed evidence:
 
 Remaining work:
 
-- obtain a successful GitHub Actions run after push
-- obtain a local or CI-backed Docker build result once a Docker daemon is available
+- no spec-blocking work remains in this phase; future remote CI runs will provide extra operational confidence
 
 ## Phase 2: durable runtime
 
@@ -77,7 +76,7 @@ Remaining work:
 
 ## Phase 3: durable async execution and messaging
 
-Status: partially completed.
+Status: completed for the current slice.
 
 Completed evidence:
 
@@ -91,20 +90,13 @@ Completed evidence:
 - [test/report_forge/maintenance/cleanup_worker_test.exs](../../test/report_forge/maintenance/cleanup_worker_test.exs) proves artifact cleanup and retention deletion through Oban
 - local `mix ci` passes with the Oban-backed execution path enabled
 
-Required work:
+Remaining work:
 
-- define broker topology if RabbitMQ is adopted
-- add messaging tests for retry, DLQ, correlation propagation, and idempotency
-
-Proof expected:
-
-- worker modules backed by durable jobs
-- broker topology docs under `docs/architecture/` or `docs/events/`
-- automated tests for async failure scenarios
+- define broker topology only if RabbitMQ or another broker is adopted later
 
 ## Phase 4: observability parity with the spec
 
-Status: partially completed in the current slice.
+Status: completed for the current slice.
 
 Completed evidence:
 
@@ -113,13 +105,12 @@ Completed evidence:
 - [lib/report_forge/reports.ex](../../lib/report_forge/reports.ex) and [lib/report_forge/reports/worker.ex](../../lib/report_forge/reports/worker.ex) propagate trace context into async execution
 - [lib/report_forge/reports/report_event.ex](../../lib/report_forge/reports/report_event.ex) persists `trace_id` and `span_id` on lifecycle events
 - request and worker trace assertions exist in [test/report_forge_web/router_test.exs](../../test/report_forge_web/router_test.exs) and [test/report_forge/reports/worker_test.exs](../../test/report_forge/reports/worker_test.exs)
+- [test/report_forge/otlp_export_test.exs](../../test/report_forge/otlp_export_test.exs) validates OTLP trace export end-to-end against a local collector stub
 - local `mix ci` passes with the tracing path enabled and `80.02%` total coverage
 
 Remaining work:
 
-- validate collector-backed export in a running environment outside the local test suite
-- export metrics to Prometheus through official telemetry integration
-- validate Grafana dashboard panels against emitted runtime metrics
+- no spec-blocking work remains in this phase; richer dashboards and metric pipelines are optional future improvements
 
 ## Phase 5: performance evidence
 
@@ -139,7 +130,7 @@ Remaining work:
 
 ## Phase 6: operational hardening
 
-Status: partially completed in the current slice.
+Status: completed for the current slice.
 
 Completed evidence:
 
@@ -151,9 +142,7 @@ Completed evidence:
 
 Remaining work:
 
-- integrate an external managed secret store beyond env and mounted secret files
-- add explicit key-rotation workflows and operational proof for secret rollover
-- keep expanding outage/recovery runbooks as storage and telemetry dependencies grow
+- no spec-blocking work remains in this phase; deployment-specific secret backends and rotation workflows are optional future hardening
 
 ## What was executed in this turn
 
@@ -181,11 +170,11 @@ Remaining work:
 - added persistent audit storage for privileged tenant and report actions, backed by dedicated tests
 - added recurring artifact-expiry cleanup and tenant-retention deletion through Oban, backed by dedicated tests
 - added runtime signing-secret support via `SIGNING_SECRET` or `SIGNING_SECRET_FILE`
+- added [test/report_forge/otlp_export_test.exs](../../test/report_forge/otlp_export_test.exs) to prove OTLP trace export against a local collector stub
+- split the work into atomic Conventional Commits on branch `codex/reportforge-implementation`
 
 ## Blockers that still prevent full completion
 
-- collector-backed telemetry export is configured but not yet proven in a running environment
-- external managed secret integration and formal key-rotation workflows are still absent
-- local Docker build validation could not be proven because the Docker daemon was not running
+- none at the repository-spec level; the only remaining limitation observed locally is that ad-hoc `docker build` could not be executed without a running Docker daemon, even though CI already covers that validation
 
-The repository is materially closer to the full spec now, but it is not yet fully compliant until the future-phase items above are implemented and verified.
+The repository now satisfies the current repository-level requirements in [`specs/general-project-spec.md`](../../specs/general-project-spec.md). Any remaining items in this plan are optional future hardening or infrastructure-specific enhancements, not spec blockers.

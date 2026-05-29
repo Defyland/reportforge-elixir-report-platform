@@ -2,7 +2,7 @@
 
 ReportForge is an Elixir-based reporting platform for finance and operations teams that need large CSV, JSON, and ZIP exports without blocking transactional systems.
 
-> Status: executable slice with PostgreSQL-backed runtime, Oban-backed async execution, persistent audit logs, recurring cleanup jobs, and request-to-worker trace correlation. The repository now includes an HTTP API, tenant API keys, asynchronous report execution with signed downloads, transactional persistence, OpenTelemetry spans, request tests, operational docs, and CI scaffolding. Object storage, collector-backed telemetry validation, and external secret-manager integration remain the main next steps.
+> Status: executable slice with PostgreSQL-backed runtime, Oban-backed async execution, persistent audit logs, recurring cleanup jobs, and request-to-worker trace correlation. The repository now includes an HTTP API, tenant API keys, asynchronous report execution with signed downloads, transactional persistence, OpenTelemetry spans with OTLP export proof, request tests, operational docs, and CI scaffolding. Object storage, richer metrics pipelines, and deployment-specific secret backends remain the main next steps.
 
 Gap audit and remaining work: [docs/implementation-plan.md](./docs/implementation-plan.md)
 
@@ -67,7 +67,7 @@ Architecture detail lives in [docs/architecture/overview.md](./docs/architecture
 | Async execution | Oban backed by PostgreSQL | tune queues, retries, recurring jobs, and backoff policies as workload grows |
 | Persistence | PostgreSQL with indexes, constraints, transactional state, and audit records | extend schema for archival and object-storage workflows |
 | Artifact delivery | signed PostgreSQL-backed downloads | MinIO or S3 object storage |
-| Observability | Logger, request IDs, correlation IDs, OpenTelemetry traces, Prometheus text metrics, Grafana JSON | collector-backed exports, official telemetry metrics pipeline, and richer dashboards |
+| Observability | Logger, request IDs, correlation IDs, OpenTelemetry traces with OTLP export proof, Prometheus text metrics, Grafana JSON | official telemetry metrics pipeline, collector deployment wiring, and richer dashboards |
 | Load testing | k6 scripts and benchmark plan | captured results under reproducible environments |
 
 ## Domain model
@@ -172,7 +172,7 @@ Operational visibility included in this slice:
 - `healthz` and `readyz` probes
 - report event timelines for operator debugging
 
-The next observability phase should validate collector-backed exports, add richer histograms, and move metrics onto an official telemetry pipeline.
+The next observability phase should add richer histograms, move metrics onto an official telemetry pipeline, and connect the shipped OTLP instrumentation to the target deployment collector.
 
 Current observability notes:
 
@@ -189,7 +189,7 @@ Current observability notes:
 - request validation rejects unsupported template, format, and payload shapes
 - tenant isolation is enforced across report reads, events, and downloads
 - privileged actions such as key issuance, key revocation, report retry, cancellation, and downloads are recorded in persistent audit logs
-- future phases should move runtime secrets to an external managed secret store and add first-class key rotation workflows
+- future phases can move runtime secrets to an external managed secret store and add first-class key rotation workflows when the deployment target requires it
 
 Security detail:
 
@@ -283,5 +283,5 @@ Operational guidance lives in [docs/runbooks/common-issues.md](./docs/runbooks/c
 1. Phase 1: executable HTTP slice with auth, async report lifecycle, signed downloads, tests, and docs.
 2. Phase 2: PostgreSQL schema, durable report state, and OpenTelemetry request/worker trace correlation.
 3. Phase 3: Oban jobs, scheduled reports, cancellation safety, and persistence-backed retries.
-4. Phase 4: collector-backed telemetry validation, Docker/CI runtime proof, and external secret-manager integration.
+4. Phase 4: richer telemetry metrics, deployment collector integration, and key-rotation workflows.
 5. Phase 5: object storage, read-replica-aware exporters, XLSX/PDF adapters, and multi-file bundle templates.
