@@ -154,7 +154,7 @@ defmodule ReportForge.ArtifactStorage.S3 do
     date = date_stamp(now)
     amz_date = amz_date(now)
     scope = credential_scope(date, config.region)
-    endpoint = object_endpoint(config, storage_key)
+    endpoint = object_endpoint(config, storage_key, config.public_endpoint)
 
     query_params = [
       {"X-Amz-Algorithm", "AWS4-HMAC-SHA256"},
@@ -193,7 +193,7 @@ defmodule ReportForge.ArtifactStorage.S3 do
     date = date_stamp(now)
     amz_date = amz_date(now)
     body_hash = if method == :put, do: ReportForge.sha256(body), else: @empty_body_hash
-    endpoint = object_endpoint(config, storage_key)
+    endpoint = object_endpoint(config, storage_key, config.endpoint)
 
     headers =
       headers
@@ -233,8 +233,8 @@ defmodule ReportForge.ArtifactStorage.S3 do
     %{url: URI.to_string(endpoint.uri), headers: headers}
   end
 
-  defp object_endpoint(config, storage_key) do
-    endpoint = URI.parse(config.endpoint)
+  defp object_endpoint(config, storage_key, endpoint_url) do
+    endpoint = URI.parse(endpoint_url)
     scheme = endpoint.scheme || "https"
     port = endpoint.port
     host = endpoint.host || raise ArgumentError, "S3 endpoint host is required"
@@ -338,6 +338,7 @@ defmodule ReportForge.ArtifactStorage.S3 do
       force_path_style: get_config(raw, :force_path_style, false),
       http_client: get_config(raw, :http_client, ReportForge.ArtifactStorage.S3HTTPClient),
       presign_ttl_seconds: get_config(raw, :presign_ttl_seconds, 300),
+      public_endpoint: get_config(raw, :public_endpoint, get_config(raw, :endpoint)),
       region: get_config(raw, :region, "us-east-1"),
       secret_access_key: get_config(raw, :secret_access_key)
     }

@@ -92,7 +92,7 @@ defmodule ReportForge.ArtifactStorageS3Test do
     query = URI.decode_query(redirect.query)
 
     assert redirect.scheme == "http"
-    assert redirect.host == "minio.test"
+    assert redirect.host == "artifacts.test"
     assert redirect.path == "/reportforge-test/#{artifact.storage_key}"
     assert query["X-Amz-Algorithm"] == "AWS4-HMAC-SHA256"
     assert query["X-Amz-Expires"] == "120"
@@ -186,7 +186,7 @@ defmodule ReportForge.ArtifactStorageS3Test do
 
     assert artifact_conn.status == 302
     assert [location] = get_resp_header(artifact_conn, "location")
-    assert location =~ "http://minio.test:9000/reportforge-test/"
+    assert location =~ "http://artifacts.test:9000/reportforge-test/"
     assert URI.decode_query(URI.parse(location).query)["X-Amz-Signature"]
   end
 
@@ -202,6 +202,7 @@ defmodule ReportForge.ArtifactStorageS3Test do
       force_path_style: true,
       http_client: FakeS3Client,
       presign_ttl_seconds: 120,
+      public_endpoint: "http://artifacts.test:9000",
       region: "us-east-1",
       secret_access_key: "minio-secret"
     )

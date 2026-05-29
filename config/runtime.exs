@@ -63,6 +63,7 @@ if config_env() != :test do
       System.get_env("REPORT_FORGE_S3_FORCE_PATH_STYLE", s3_force_path_style_default) == "true",
     presign_ttl_seconds:
       String.to_integer(System.get_env("REPORT_FORGE_S3_PRESIGN_TTL_SECONDS", "300")),
+    public_endpoint: System.get_env("REPORT_FORGE_S3_PUBLIC_ENDPOINT"),
     region: s3_region,
     secret_access_key: s3_secret_access_key
   ]

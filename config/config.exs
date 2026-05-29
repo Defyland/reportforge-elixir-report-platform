@@ -16,6 +16,7 @@ config :report_forge,
     force_path_style: System.get_env("REPORT_FORGE_S3_FORCE_PATH_STYLE", "false") == "true",
     presign_ttl_seconds:
       String.to_integer(System.get_env("REPORT_FORGE_S3_PRESIGN_TTL_SECONDS", "300")),
+    public_endpoint: System.get_env("REPORT_FORGE_S3_PUBLIC_ENDPOINT"),
     region: System.get_env("REPORT_FORGE_S3_REGION", "us-east-1"),
     secret_access_key: System.get_env("REPORT_FORGE_S3_SECRET_ACCESS_KEY")
   ],
