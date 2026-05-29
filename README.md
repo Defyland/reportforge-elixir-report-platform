@@ -209,6 +209,7 @@ The main decisions are recorded in:
 - [docs/adr/0002-deduplication-and-signed-downloads.md](./docs/adr/0002-deduplication-and-signed-downloads.md)
 - [docs/adr/0003-task-supervisor-before-oban.md](./docs/adr/0003-task-supervisor-before-oban.md)
 - [docs/adr/0004-adopt-oban-for-durable-execution.md](./docs/adr/0004-adopt-oban-for-durable-execution.md)
+- [docs/adr/0005-artifact-storage-boundary-and-retry-policy.md](./docs/adr/0005-artifact-storage-boundary-and-retry-policy.md)
 
 ## How to run locally
 
