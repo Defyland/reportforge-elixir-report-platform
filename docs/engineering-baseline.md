@@ -18,18 +18,19 @@ This repository targets the portfolio-wide standard from [`specs/general-project
 - bounded async lifecycle with progress and operator-visible events
 - signed artifact downloads and expiry semantics
 - isolation of tenant data across report reads and artifacts
-- explicit migration path from the current local object-storage adapter toward S3/MinIO, managed secrets, and cleanup workflows
+- explicit runtime path across local, S3/MinIO, managed secrets, and cleanup workflows
 
 ## Current slice boundary
 
 The current slice is intentionally infrastructure-light:
 
 - PostgreSQL-backed storage for the main runtime path
-- local object storage for generated artifact bytes
+- local object storage for generated artifact bytes by default
+- S3-compatible object storage for AWS S3 or MinIO deployments
 - Oban-backed durable execution
 - signed streaming artifact delivery through a storage boundary
 
-Those are deliberate trade-offs to keep artifact storage production-shaped without adding MinIO/S3 operational overhead to the local slice.
+Those are deliberate trade-offs to keep artifact storage production-shaped while preserving a lightweight local developer path.
 
 ## Review note
 

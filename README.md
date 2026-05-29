@@ -2,7 +2,7 @@
 
 ReportForge is an Elixir-based reporting platform for finance and operations teams that need large CSV, JSON, and ZIP exports without blocking transactional systems.
 
-> Status: executable slice with PostgreSQL-backed runtime, local object storage for artifacts, Oban-backed async execution, persistent audit logs, recurring cleanup jobs, and request-to-worker trace correlation. The repository now includes an HTTP API, tenant API keys, asynchronous report execution with signed streaming downloads, transactional metadata persistence, OpenTelemetry spans with OTLP export proof, telemetry-derived metrics, request tests, operational docs, and CI scaffolding. A MinIO/S3 adapter, richer production metric export, and deployment-specific secret backends remain the main next steps.
+> Status: executable slice with PostgreSQL-backed runtime, local and S3-compatible artifact storage, Oban-backed async execution, persistent audit logs, recurring cleanup jobs, and request-to-worker trace correlation. The repository now includes an HTTP API, tenant API keys, asynchronous report execution with signed streaming or presigned-redirect downloads, transactional metadata persistence, OpenTelemetry spans with OTLP export proof, telemetry-derived metrics, request tests, operational docs, and CI scaffolding. Production metric export, deployment-specific secret backends, and environment-specific infrastructure remain the main next steps.
 
 Gap audit and remaining work: [docs/implementation-plan.md](./docs/implementation-plan.md)
 
@@ -67,7 +67,7 @@ Architecture detail lives in [docs/architecture/overview.md](./docs/architecture
 | Language | Elixir 1.17 | Elixir remains the primary platform |
 | Async execution | Oban backed by PostgreSQL | tune queues, retries, recurring jobs, and backoff policies as workload grows |
 | Persistence | PostgreSQL with indexes, constraints, transactional state, and audit records | extend schema for archival and object-storage workflows |
-| Artifact delivery | signed streaming downloads from local object storage with PostgreSQL metadata | MinIO or S3 adapter |
+| Artifact delivery | signed streaming downloads from local object storage or presigned S3/MinIO redirects with PostgreSQL metadata | production storage integration tests and bucket lifecycle policies |
 | Observability | Logger, request IDs, correlation IDs, OpenTelemetry traces with OTLP export proof, `:telemetry` events, Prometheus text metrics, Grafana JSON | collector deployment wiring and richer dashboards |
 | Load testing | k6 scripts and benchmark plan | captured results under reproducible environments |
 
@@ -79,7 +79,7 @@ Core entities:
 - `ApiKey`: tenant credential with prefix, hashed secret, and revocation state
 - `Report`: async export aggregate with lifecycle, filters, and artifact metadata
 - `ReportEvent`: immutable lifecycle event stream for a report request
-- `Artifact`: signed downloadable output metadata plus binary payload stored in PostgreSQL for the current slice
+- `Artifact`: signed downloadable output metadata persisted in PostgreSQL, with binary bytes stored through the active artifact-storage adapter
 
 See [docs/architecture/domain-model.md](./docs/architecture/domain-model.md) for invariants and lifecycle ownership.
 
@@ -148,7 +148,7 @@ The current test suite covers:
 - audit persistence for tenant bootstrap, key management, downloads, and report mutations
 - retention-job and artifact-cleanup execution through Oban
 
-The next phases should add MinIO/S3 adapter integration tests and more recovery scenarios around retries, cancellations, queue backpressure, and dependency outages.
+The next phases should add container-backed MinIO/S3 integration tests and more recovery scenarios around retries, cancellations, queue backpressure, and dependency outages.
 
 ## Performance benchmarks
 
@@ -229,6 +229,21 @@ The service listens on `http://localhost:4000` by default. Override with environ
 PORT=4100 BASE_URL=http://localhost:4100 REPORT_FORGE_DB_PORT=55432 mix run --no-halt
 ```
 
+Artifact storage defaults to the local adapter. Use the S3-compatible adapter for AWS S3 or MinIO:
+
+```sh
+REPORT_FORGE_ARTIFACT_STORAGE_ADAPTER=minio \
+REPORT_FORGE_S3_BUCKET=reportforge-artifacts \
+REPORT_FORGE_S3_ENDPOINT=http://localhost:9000 \
+REPORT_FORGE_S3_ACCESS_KEY_ID=minioadmin \
+REPORT_FORGE_S3_SECRET_ACCESS_KEY=minioadmin \
+REPORT_FORGE_S3_FORCE_PATH_STYLE=true \
+REPORT_FORGE_DB_PORT=55432 \
+mix run --no-halt
+```
+
+For AWS S3, use `REPORT_FORGE_ARTIFACT_STORAGE_ADAPTER=s3`, set `REPORT_FORGE_S3_REGION`, omit the MinIO endpoint unless using a custom endpoint, and provide `REPORT_FORGE_S3_SECRET_ACCESS_KEY` or `REPORT_FORGE_S3_SECRET_ACCESS_KEY_FILE`.
+
 Or build and run the container:
 
 ```sh
@@ -288,4 +303,4 @@ Operational guidance lives in [docs/runbooks/common-issues.md](./docs/runbooks/c
 2. Phase 2: PostgreSQL schema, durable report state, and OpenTelemetry request/worker trace correlation.
 3. Phase 3: Oban jobs, scheduled reports, cancellation safety, and persistence-backed retries.
 4. Phase 4: richer telemetry metrics, deployment collector integration, and key-rotation workflows.
-5. Phase 5: MinIO/S3 adapter, read-replica-aware exporters, XLSX/PDF adapters, and multi-file bundle templates.
+5. Phase 5: container-backed storage integration tests, read-replica-aware exporters, XLSX/PDF adapters, and multi-file bundle templates.

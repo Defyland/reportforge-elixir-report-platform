@@ -71,6 +71,7 @@ The worker could mark a report failed, but transient errors such as upstream tim
 - updated [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex) so `/readyz` returns `503` when dependencies are not ready
 - hardened signed artifact responses in [lib/report_forge_web/router.ex](../../lib/report_forge_web/router.ex) to return the stored artifact media type and `X-Content-Type-Options: nosniff`
 - added [lib/report_forge/artifact_storage.ex](../../lib/report_forge/artifact_storage.ex), [lib/report_forge/artifact_storage/local.ex](../../lib/report_forge/artifact_storage/local.ex), and the compatibility PostgreSQL adapter in [lib/report_forge/artifact_storage/database.ex](../../lib/report_forge/artifact_storage/database.ex)
+- added [lib/report_forge/artifact_storage/s3.ex](../../lib/report_forge/artifact_storage/s3.ex) with AWS Signature Version 4, S3/MinIO runtime configuration, presigned redirects, and compensation for metadata insert failures
 - moved artifact bytes out of PostgreSQL for the default runtime while keeping metadata, checksum, content type, storage key, and expiry in the database
 - moved report retry cleanup, download lookup, completion persistence, and maintenance expiry through the storage boundary
 - added concurrent idempotency and fingerprint tests in [test/report_forge/reports_test.exs](../../test/report_forge/reports_test.exs)
@@ -78,6 +79,7 @@ The worker could mark a report failed, but transient errors such as upstream tim
 - added response contract tests in [test/report_forge_web/openapi_contract_test.exs](../../test/report_forge_web/openapi_contract_test.exs), validating live JSON responses against `openapi.yaml`
 - added `:telemetry` events for HTTP requests, report lifecycle metrics, retries, and cleanup while preserving Prometheus output
 - added [test/report_forge/artifact_storage_test.exs](../../test/report_forge/artifact_storage_test.exs) and worker retry tests to prove the new contracts
+- added [test/report_forge/artifact_storage_s3_test.exs](../../test/report_forge/artifact_storage_s3_test.exs) to prove S3 request signing, transient failure classification, redirect generation, and object-delete compensation
 - extended [test/report_forge_web/router_test.exs](../../test/report_forge_web/router_test.exs) to prove the degraded-readiness path and the hardened download headers
 - updated [docs/architecture/observability.md](./observability.md), [docs/runbooks/common-issues.md](../runbooks/common-issues.md), and [openapi.yaml](../../openapi.yaml) to reflect the stricter runtime behavior
 

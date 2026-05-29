@@ -44,7 +44,7 @@ That means the durable model is not only planned; it is already executable in th
 
 - keep public API contracts stable while extending the schema
 - keep Oban job payloads backward compatible while queue behavior evolves
-- backfill or migrate artifact references before moving from local object storage to a remote object backend
+- backfill or migrate artifact references before changing object-storage backends in production
 - keep cleanup and audit indexes aligned with retention and forensics use cases
 
 ## Rollback strategy

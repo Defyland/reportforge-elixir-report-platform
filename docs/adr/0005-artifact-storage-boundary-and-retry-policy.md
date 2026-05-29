@@ -16,7 +16,9 @@ Introduce `ReportForge.ArtifactStorage` as the boundary for artifact writes, rea
 
 Use `ReportForge.ArtifactStorage.Local` as the default adapter. PostgreSQL stores artifact metadata such as token, filename, content type, checksum, byte size, storage key, and expiry; artifact bytes are written to local object storage on disk. Keep `ReportForge.ArtifactStorage.Database` as a compatibility adapter for legacy or test scenarios.
 
-Downloads resolve signed metadata through PostgreSQL and stream the artifact from the storage adapter. Future S3, MinIO, or managed object-storage adapters should implement the same behaviour.
+Implement `ReportForge.ArtifactStorage.S3` for AWS S3 and MinIO-compatible deployments. The S3 adapter signs `PUT`/`DELETE` requests with AWS Signature Version 4, stores only metadata in PostgreSQL, compensates uploaded objects when metadata insertion fails, and resolves downloads as short-lived presigned redirects.
+
+Downloads resolve signed metadata through PostgreSQL and either stream from the local adapter or redirect to a presigned object-storage URL from the S3 adapter.
 
 Configure report workers with three Oban attempts and deterministic quadratic backoff. Retry only classified transient errors:
 
@@ -32,5 +34,5 @@ When a retryable error occurs before the final attempt, move the report back to 
 - Cleanup and download flows use the same storage contract as report completion.
 - Artifact bytes no longer live in PostgreSQL for the default runtime.
 - Transient failures are visible in report history instead of being silent Oban internals.
-- The current implementation still avoids adding MinIO/S3 operational overhead to the local slice.
-- Future object-storage migration requires a new adapter and targeted tests, not a rewrite of report lifecycle logic.
+- The local developer path still avoids adding MinIO/S3 operational overhead.
+- Moving between local, S3, MinIO, or compatibility database storage is now a runtime configuration change plus adapter-specific operational validation, not a rewrite of report lifecycle logic.

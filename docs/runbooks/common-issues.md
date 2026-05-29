@@ -32,15 +32,28 @@ Action:
 
 Meaning:
 
-- the artifact storage path was unavailable during generation
+- the artifact storage backend was unavailable during generation
 - the worker treats this as transient and retries it before final failure
 
 Action:
 
 - call `GET /readyz` and confirm the database and signer checks are `up`
-- confirm `REPORT_FORGE_ARTIFACT_STORAGE_PATH` exists and is writable by the service process
+- if using local storage, confirm `REPORT_FORGE_ARTIFACT_STORAGE_PATH` exists and is writable by the service process
+- if using S3/MinIO, confirm `REPORT_FORGE_S3_BUCKET`, endpoint, credentials, IAM or bucket policy, DNS, TLS, and service clock are valid
 - inspect report events for `report.retry_scheduled`
 - retry only after storage health has recovered
+
+## Download endpoint returns `302`
+
+Meaning:
+
+- the service verified the signed ReportForge download URL
+- the active S3-compatible adapter returned a short-lived presigned object-storage URL
+
+Action:
+
+- follow the `Location` header
+- if the target object store rejects the redirect, check object permissions, bucket policy, endpoint reachability, and clock skew
 
 ## Download URL returns `410`
 
