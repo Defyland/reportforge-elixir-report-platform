@@ -8,15 +8,41 @@ defmodule ReportForge.SpecComplianceTest do
     "openapi.yaml",
     ".github/workflows/ci.yml",
     "benchmarks/baseline.md",
+    "docs/engineering-case-study.md",
+    "docs/spec-driven/senior-readiness-spec.md",
+    "docs/spec-driven/implementation-plan.md",
+    "docs/spec-driven/verification-report.md",
+    "docs/product/problem.md",
+    "docs/product/personas.md",
+    "docs/product/use-cases.md",
+    "docs/product/non-goals.md",
+    "docs/product/roadmap.md",
+    "docs/product/pricing-or-plans.md",
+    "docs/domain/glossary.md",
+    "docs/domain/bounded-contexts.md",
+    "docs/domain/aggregates.md",
+    "docs/domain/invariants.md",
+    "docs/domain/state-machines.md",
     "docs/api/error-format.md",
     "docs/api/http-examples.md",
     "docs/api/authorization-matrix.md",
+    "docs/architecture/c4-context.md",
+    "docs/architecture/c4-container.md",
+    "docs/architecture/module-boundaries.md",
+    "docs/architecture/sequence-diagrams.md",
+    "docs/architecture/deployment-view.md",
     "docs/architecture/observability.md",
     "docs/architecture/threat-model.md",
     "docs/architecture/large-report-pipeline.md",
     "docs/adr/0006-stream-first-before-platform-complexity.md",
     "docs/events/README.md",
     "docs/security/threat-model.md",
+    "docs/security/authorization-matrix.md",
+    "docs/security/data-classification.md",
+    "docs/security/secrets.md",
+    "docs/security/abuse-cases.md",
+    "docs/scalability.md",
+    "docs/operational-cost.md",
     "docs/architecture/grafana-dashboard.json",
     "docs/benchmarks/methodology.md",
     "docs/runbooks/common-issues.md",
@@ -29,9 +55,12 @@ defmodule ReportForge.SpecComplianceTest do
     "docs/architecture",
     "docs/benchmarks",
     "docs/diagrams",
+    "docs/domain",
     "docs/events",
+    "docs/product",
     "docs/runbooks",
     "docs/security",
+    "docs/spec-driven",
     "benchmarks/results"
   ]
 
@@ -119,6 +148,42 @@ defmodule ReportForge.SpecComplianceTest do
     "cancelled"
   ]
 
+  @required_spec_driven_sections [
+    "## Product Bar",
+    "## Domain Bar",
+    "## Architecture Bar",
+    "## API Bar",
+    "## Data and Consistency Bar",
+    "## Security Bar",
+    "## Observability Bar",
+    "## Performance Bar",
+    "## Scalability Bar",
+    "## Operational Cost Bar",
+    "## Maintainability Bar",
+    "## Readability Bar",
+    "## Test and CI Bar",
+    "## Evidence Matrix",
+    "## Out of Scope"
+  ]
+
+  @required_case_study_sections [
+    "## 1. Product Context",
+    "## 2. Domain Model",
+    "## 3. Architecture",
+    "## 4. Key Trade-Offs",
+    "## 5. Data Model",
+    "## 6. Consistency Model",
+    "## 7. Failure Scenarios",
+    "## 8. Performance Strategy",
+    "## 9. Scalability Strategy",
+    "## 10. Security Model",
+    "## 11. Observability",
+    "## 12. Operational Cost",
+    "## 13. Maintainability",
+    "## 14. Product Decisions",
+    "## 15. What I Would Do Next"
+  ]
+
   test "repository keeps the mandatory structure and populated README sections" do
     Enum.each(@required_files, &assert_file!/1)
     Enum.each(@required_dirs, &assert_dir!/1)
@@ -159,6 +224,101 @@ defmodule ReportForge.SpecComplianceTest do
     assert String.contains?(error_format, "\"code\": \"validation_failed\"")
     assert String.contains?(error_format, "`unauthorized`")
     assert String.contains?(error_format, "`rate_limited`")
+  end
+
+  test "spec-driven docs define senior bars, implementation mapping, and verification evidence" do
+    senior_spec = read_repo!("docs/spec-driven/senior-readiness-spec.md")
+    implementation_plan = read_repo!("docs/spec-driven/implementation-plan.md")
+    verification_report = read_repo!("docs/spec-driven/verification-report.md")
+
+    Enum.each(@required_spec_driven_sections, fn section ->
+      assert String.contains?(senior_spec, section),
+             "senior readiness spec must include #{section}"
+    end)
+
+    Enum.each(
+      ["## Scope", "## Files to Create or Update", "## Acceptance Criteria Mapping"],
+      fn section ->
+        assert String.contains?(implementation_plan, section),
+               "implementation plan must include #{section}"
+      end
+    )
+
+    Enum.each(
+      ["## Summary", "## Commands Run", "## Passing Criteria", "## Remaining Risk"],
+      fn section ->
+        assert String.contains?(verification_report, section),
+               "verification report must include #{section}"
+      end
+    )
+
+    Enum.each(
+      ["README.md", "docs/product", "docs/domain", "docs/security", "docs/scalability.md"],
+      fn evidence ->
+        assert String.contains?(senior_spec <> implementation_plan, evidence),
+               "spec-driven docs must cite #{evidence}"
+      end
+    )
+  end
+
+  test "product, domain, scalability, cost, and case-study docs satisfy senior rubric" do
+    product_docs =
+      [
+        "docs/product/problem.md",
+        "docs/product/personas.md",
+        "docs/product/use-cases.md",
+        "docs/product/non-goals.md",
+        "docs/product/roadmap.md"
+      ]
+      |> Enum.map_join("\n", &read_repo!/1)
+
+    domain_docs =
+      [
+        "docs/domain/glossary.md",
+        "docs/domain/bounded-contexts.md",
+        "docs/domain/aggregates.md",
+        "docs/domain/invariants.md",
+        "docs/domain/state-machines.md"
+      ]
+      |> Enum.map_join("\n", &read_repo!/1)
+
+    scalability = read_repo!("docs/scalability.md")
+    cost = read_repo!("docs/operational-cost.md")
+    case_study = read_repo!("docs/engineering-case-study.md")
+
+    Enum.each(["finance", "tenant", "idempotency", "signed", "retention"], fn term ->
+      assert String.contains?(String.downcase(product_docs), term),
+             "product docs must mention #{term}"
+    end)
+
+    Enum.each(
+      ["Organization", "Report", "ReportEvent", "Artifact", "Report State Machine"],
+      fn term ->
+        assert String.contains?(domain_docs, term),
+               "domain docs must mention #{term}"
+      end
+    )
+
+    Enum.each(
+      ["Hot Paths", "Fastest Growing Tables", "Queue Buildup", "Consistency Boundaries"],
+      fn term ->
+        assert String.contains?(scalability, term),
+               "scalability doc must mention #{term}"
+      end
+    )
+
+    Enum.each(
+      ["Infrastructure Components", "Cost Drivers", "Backup And Retention", "Vendor Lock-In"],
+      fn term ->
+        assert String.contains?(cost, term),
+               "operational cost doc must mention #{term}"
+      end
+    )
+
+    Enum.each(@required_case_study_sections, fn section ->
+      assert String.contains?(case_study, section),
+             "engineering case study must include #{section}"
+    end)
   end
 
   test "ci workflow covers lint, tests, security, docker, openapi, and coverage" do
@@ -202,6 +362,10 @@ defmodule ReportForge.SpecComplianceTest do
     observability = read_repo!("docs/architecture/observability.md")
     threat_model = read_repo!("docs/architecture/threat-model.md")
     financial_threat_model = read_repo!("docs/security/threat-model.md")
+    security_auth_matrix = read_repo!("docs/security/authorization-matrix.md")
+    data_classification = read_repo!("docs/security/data-classification.md")
+    secrets = read_repo!("docs/security/secrets.md")
+    abuse_cases = read_repo!("docs/security/abuse-cases.md")
     auth_matrix = read_repo!("docs/api/authorization-matrix.md")
     not_found_normalization = "Cross-tenant report reads are intentionally normalized to `404`"
 
@@ -218,6 +382,14 @@ defmodule ReportForge.SpecComplianceTest do
     Enum.each(["financial exports", "signed URLs", "tenant", "retention", "storage"], fn term ->
       assert String.contains?(financial_threat_model, term),
              "financial threat model must mention #{term}"
+    end)
+
+    Enum.each(["signed URL", "tenant", "Artifact", "API key"], fn term ->
+      assert String.contains?(
+               security_auth_matrix <> data_classification <> secrets <> abuse_cases,
+               term
+             ),
+             "security docs must mention #{term}"
     end)
 
     assert String.contains?(auth_matrix, "| Endpoint | Auth mode | Scope rule |")
