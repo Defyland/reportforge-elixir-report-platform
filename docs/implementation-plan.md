@@ -68,7 +68,7 @@ Completed evidence:
 - the main runtime path in [ReportForge.Identity](../../lib/report_forge/identity.ex) and [ReportForge.Reports](../../lib/report_forge/reports.ex) reads and writes PostgreSQL directly
 - lifecycle events and artifact metadata are persisted transactionally, while artifact bytes are written through the storage boundary
 - request tests and dedicated DB tests both exercise the durable path
-- local `mix ci` passes against an ephemeral PostgreSQL instance with `78.15%` coverage
+- local `mix ci` passes against an isolated PostgreSQL test database with `78.31%` coverage
 
 Remaining work:
 
@@ -108,7 +108,7 @@ Completed evidence:
 - [lib/report_forge/reports/report_event.ex](../../lib/report_forge/reports/report_event.ex) persists `trace_id` and `span_id` on lifecycle events
 - request and worker trace assertions exist in [test/report_forge_web/router_test.exs](../../test/report_forge_web/router_test.exs) and [test/report_forge/reports/worker_test.exs](../../test/report_forge/reports/worker_test.exs)
 - [test/report_forge/otlp_export_test.exs](../../test/report_forge/otlp_export_test.exs) validates OTLP trace export end-to-end against a local collector stub
-- local `mix ci` passes with the tracing path enabled and `78.15%` total coverage
+- local `mix ci` passes with the tracing path enabled and `78.31%` total coverage
 
 Remaining work:
 
@@ -164,9 +164,9 @@ Remaining work:
 - added an automated baseline validation script and CI step
 - extended tests with async lifecycle, validation, cancellation/retry, and rate-limit coverage
 - updated README, diagrams, runbooks, ADRs, and the implementation plan to reflect the PostgreSQL + Oban runtime that is actually shipping
-- ended this gate at `78.15%` total coverage with the Oban path enabled
+- ended this gate at `78.31%` total coverage with the Oban path enabled
 - added audit-style structured log events for tenant and report actions
-- reran the full gate with `mix ci`, `bash scripts/validate_requirements.sh`, `markdownlint`, and `redocly lint`, ending with `47` tests passing, `1` intentional MinIO skip in the default local run, `78.15%` total coverage, and `3` non-blocking OpenAPI warnings
+- reran the full gate with `mix ci`, `bash scripts/validate_requirements.sh`, `markdownlint`, and `redocly lint`, ending with `50` tests passing, `1` intentional MinIO skip in the default local run, `78.31%` total coverage, and `3` non-blocking OpenAPI warnings
 - captured dated benchmark evidence under [benchmarks/results/2026-05-29](../benchmarks/results/2026-05-29/README.md), including a rate-limit failure mode and a benchmark-tuned passing load profile
 - made tenant rate limits configurable by environment so benchmark runs can isolate queue and persistence behavior without changing product defaults
 - added persistent audit storage for privileged tenant and report actions, backed by dedicated tests
@@ -181,6 +181,8 @@ Remaining work:
 - added classified Oban retries with backoff for transient report worker failures
 - added OpenAPI response contract tests against live route responses
 - added `:telemetry` events as the source for Prometheus counters
+- added the spec-driven senior readiness package, product docs, domain docs, architecture C4 docs, security docs, scalability notes, operational cost notes, and engineering case study
+- aligned report lifecycle worker events with the canonical `report.progress_updated`, `report.uploaded`, and `report.completed` contract
 - split the work into atomic Conventional Commits on branch `codex/reportforge-implementation`
 
 ## Blockers that still prevent full completion

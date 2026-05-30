@@ -16,7 +16,7 @@ This repository is production-shaped, but not a turnkey production deployment. T
 
 ## Current validation evidence
 
-- `mix ci`: 47 tests passing, 1 intentional MinIO skip in the default local run, 78.15% coverage
+- `mix ci`: 50 tests passing, 1 intentional MinIO skip in the default local run, 78.31% coverage
 - `REPORT_FORGE_MINIO_INTEGRATION=1 mix test ... --include minio`: real MinIO adapter test passing
 - `docker build -t reportforge-ci .`: production image build passing
 - `docker compose up -d` plus `scripts/smoke.sh`: end-to-end API, Oban, PostgreSQL, MinIO, metrics, and artifact download path passing

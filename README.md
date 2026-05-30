@@ -4,6 +4,12 @@ ReportForge is an Elixir-based reporting platform for finance and operations tea
 
 > Status: executable slice with PostgreSQL-backed runtime, local and S3-compatible artifact storage, Oban-backed async execution, persistent audit logs, recurring cleanup jobs, and request-to-worker trace correlation. The repository now includes an HTTP API, tenant API keys, asynchronous report execution with signed streaming or presigned-redirect downloads, transactional metadata persistence, OpenTelemetry spans with OTLP export proof, telemetry-derived metrics, request tests, operational docs, and CI scaffolding. Production metric export, deployment-specific secret backends, and environment-specific infrastructure remain the main next steps.
 
+Spec-driven evidence:
+[senior readiness spec](./docs/spec-driven/senior-readiness-spec.md),
+[implementation plan](./docs/spec-driven/implementation-plan.md),
+[verification report](./docs/spec-driven/verification-report.md), and
+[engineering case study](./docs/engineering-case-study.md).
+
 Gap audit and remaining work: [docs/implementation-plan.md](./docs/implementation-plan.md)
 
 ## What is this product?
@@ -23,12 +29,19 @@ ReportForge solves that by making report generation explicit:
 - event history for each report request
 - operational endpoints, metrics, and failure-oriented documentation
 
+Product detail lives in [docs/product/problem.md](./docs/product/problem.md),
+[docs/product/use-cases.md](./docs/product/use-cases.md),
+[docs/product/non-goals.md](./docs/product/non-goals.md), and
+[docs/product/roadmap.md](./docs/product/roadmap.md).
+
 ## Target users
 
 - treasury and finance operations teams exporting balance and ledger views
 - internal data operations teams handling audit and reconciliation flows
 - platform engineers who need a reference backend for async export orchestration
 - support and reliability teams investigating delayed or failed report runs
+
+Persona detail lives in [docs/product/personas.md](./docs/product/personas.md).
 
 ## Main features
 
@@ -57,7 +70,7 @@ The current implementation is a lightweight Elixir service built with Bandit and
 - `ReportForge.Oban` schedules durable report jobs backed by PostgreSQL
 - `ReportForge.Telemetry` emits domain/runtime events consumed by `ReportForge.Metrics`
 
-Architecture detail lives in [docs/architecture/overview.md](./docs/architecture/overview.md), [docs/architecture/large-report-pipeline.md](./docs/architecture/large-report-pipeline.md), and [docs/diagrams/system-context.md](./docs/diagrams/system-context.md).
+Architecture detail lives in [docs/architecture/overview.md](./docs/architecture/overview.md), [docs/architecture/c4-context.md](./docs/architecture/c4-context.md), [docs/architecture/c4-container.md](./docs/architecture/c4-container.md), [docs/architecture/module-boundaries.md](./docs/architecture/module-boundaries.md), [docs/architecture/deployment-view.md](./docs/architecture/deployment-view.md), [docs/architecture/large-report-pipeline.md](./docs/architecture/large-report-pipeline.md), and [docs/diagrams/system-context.md](./docs/diagrams/system-context.md).
 
 ## Tech stack
 
@@ -81,7 +94,13 @@ Core entities:
 - `ReportEvent`: immutable lifecycle event stream for a report request
 - `Artifact`: signed downloadable output metadata persisted in PostgreSQL, with binary bytes stored through the active artifact-storage adapter
 
-See [docs/architecture/domain-model.md](./docs/architecture/domain-model.md) for invariants and lifecycle ownership.
+See [docs/architecture/domain-model.md](./docs/architecture/domain-model.md),
+[docs/domain/glossary.md](./docs/domain/glossary.md),
+[docs/domain/bounded-contexts.md](./docs/domain/bounded-contexts.md),
+[docs/domain/aggregates.md](./docs/domain/aggregates.md),
+[docs/domain/invariants.md](./docs/domain/invariants.md), and
+[docs/domain/state-machines.md](./docs/domain/state-machines.md) for domain
+language, invariants, and lifecycle ownership.
 
 ## API documentation
 
@@ -199,6 +218,10 @@ Security detail:
 
 - [docs/architecture/threat-model.md](./docs/architecture/threat-model.md)
 - [docs/security/threat-model.md](./docs/security/threat-model.md)
+- [docs/security/authorization-matrix.md](./docs/security/authorization-matrix.md)
+- [docs/security/data-classification.md](./docs/security/data-classification.md)
+- [docs/security/secrets.md](./docs/security/secrets.md)
+- [docs/security/abuse-cases.md](./docs/security/abuse-cases.md)
 - [docs/api/authorization-matrix.md](./docs/api/authorization-matrix.md)
 - [docs/runbooks/report-artifact-exposure.md](./docs/runbooks/report-artifact-exposure.md)
 
@@ -217,6 +240,10 @@ The main decisions are recorded in:
 - [docs/adr/0004-adopt-oban-for-durable-execution.md](./docs/adr/0004-adopt-oban-for-durable-execution.md)
 - [docs/adr/0005-artifact-storage-boundary-and-retry-policy.md](./docs/adr/0005-artifact-storage-boundary-and-retry-policy.md)
 - [docs/adr/0006-stream-first-before-platform-complexity.md](./docs/adr/0006-stream-first-before-platform-complexity.md)
+
+Scalability and cost trade-offs are documented in
+[docs/scalability.md](./docs/scalability.md) and
+[docs/operational-cost.md](./docs/operational-cost.md).
 
 ## How to run locally
 
