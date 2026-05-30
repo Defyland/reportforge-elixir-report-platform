@@ -36,11 +36,16 @@ defmodule ReportForge.Reports.Worker do
         with {:ok, report} <- Reports.begin_processing(report_id),
              :ok <- sleep_step(),
              {:ok, _report} <-
-               Reports.advance_processing(report_id, 35, "report.query_finished", %{}),
+               Reports.advance_processing(report_id, 35, "report.progress_updated", %{
+                 "stage" => "query",
+                 "rows_processed" => 0
+               }),
              :ok <- sleep_step(),
              {:ok, artifact} <- Reports.generate_artifact(report),
              {:ok, _report} <-
-               Reports.advance_processing(report_id, 80, "report.storage_staged", %{
+               Reports.advance_processing(report_id, 80, "report.progress_updated", %{
+                 "stage" => "serialize",
+                 "rows_processed" => artifact.row_count,
                  "byte_size" => artifact.byte_size,
                  "checksum" => artifact.checksum
                }),

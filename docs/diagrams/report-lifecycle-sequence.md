@@ -15,8 +15,9 @@ sequenceDiagram
   API-->>Client: 202 Accepted
   Queue->>Worker: execute job
   Worker->>DB: report.started
-  Worker->>DB: report.query_finished
-  Worker->>DB: report.storage_staged
+  Worker->>DB: report.progress_updated
+  Worker->>DB: report.progress_updated
+  Worker->>DB: report.uploaded
   Worker->>DB: report.completed + artifact metadata
   Client->>API: GET /api/v1/reports/{id}/download
   API-->>Client: signed URL

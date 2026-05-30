@@ -31,4 +31,5 @@
 
 - binary output for CSV, JSON, or ZIP
 - referenced through a signed URL
-- currently stored in PostgreSQL with TTL metadata
+- stored through the active `ReportForge.ArtifactStorage` adapter
+- keeps authorization, checksum, content type, byte size, storage key, and TTL metadata in PostgreSQL

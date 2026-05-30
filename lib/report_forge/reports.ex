@@ -532,7 +532,34 @@ defmodule ReportForge.Reports do
                      exp: DateTime.to_unix(download_expires_at)
                    })
 
-                 with {:ok, updated_report} <-
+                 with {:ok, stored_artifact} <-
+                        ArtifactStorage.put_artifact(%{
+                          id: ReportForge.generate_id("art"),
+                          report_id: report.id,
+                          organization_id: report.organization_id,
+                          token: token,
+                          body: artifact.body,
+                          filename: artifact.filename,
+                          content_type: artifact.content_type,
+                          expires_at: download_expires_at
+                        }),
+                      {:ok, _uploaded_event} <-
+                        persist_event(
+                          event(
+                            report.id,
+                            report.correlation_id,
+                            "report.uploaded",
+                            report.status,
+                            90,
+                            %{
+                              "storage_key" => stored_artifact.storage_key,
+                              "byte_size" => stored_artifact.byte_size,
+                              "checksum" => stored_artifact.checksum,
+                              "content_type" => stored_artifact.content_type
+                            }
+                          )
+                        ),
+                      {:ok, updated_report} <-
                         update_report(report, %{
                           status: next_status,
                           progress_pct: 100,
@@ -549,7 +576,7 @@ defmodule ReportForge.Reports do
                           last_error: nil,
                           updated_at: now
                         }),
-                      {:ok, _event} <-
+                      {:ok, _completed_event} <-
                         persist_event(
                           event(
                             report.id,
@@ -559,21 +586,11 @@ defmodule ReportForge.Reports do
                             updated_report.progress_pct,
                             %{
                               "row_count" => artifact.row_count,
-                              "byte_size" => artifact.byte_size
+                              "byte_size" => artifact.byte_size,
+                              "checksum" => artifact.checksum
                             }
                           )
-                        ),
-                      {:ok, _artifact} <-
-                        ArtifactStorage.put_artifact(%{
-                          id: ReportForge.generate_id("art"),
-                          report_id: report.id,
-                          organization_id: report.organization_id,
-                          token: token,
-                          body: artifact.body,
-                          filename: artifact.filename,
-                          content_type: artifact.content_type,
-                          expires_at: download_expires_at
-                        }) do
+                        ) do
                    %{report: updated_report, duration_ms: duration_ms(report.started_at, now)}
                  else
                    {:error, %Changeset{} = changeset} ->

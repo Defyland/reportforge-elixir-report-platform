@@ -21,10 +21,21 @@ defmodule ReportForge.Reports.WorkerTest do
     assert Enum.map(report_events, & &1.event_type) == [
              "report.requested",
              "report.started",
-             "report.query_finished",
-             "report.storage_staged",
+             "report.progress_updated",
+             "report.progress_updated",
+             "report.uploaded",
              "report.completed"
            ]
+
+    assert [query_event, serialize_event] =
+             Enum.filter(report_events, &(&1.event_type == "report.progress_updated"))
+
+    assert query_event.metadata["stage"] == "query"
+    assert serialize_event.metadata["stage"] == "serialize"
+
+    uploaded_event = Enum.find(report_events, &(&1.event_type == "report.uploaded"))
+    assert uploaded_event.metadata["byte_size"] > 0
+    assert is_binary(uploaded_event.metadata["checksum"])
 
     assert report_events
            |> Enum.map(& &1.trace_id)
