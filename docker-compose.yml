@@ -47,6 +47,9 @@ services:
 
   reportforge:
     build: .
+    cap_drop:
+      - ALL
+    cpus: "1.0"
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,8 +76,16 @@ services:
       REPORT_FORGE_S3_REGION: us-east-1
       REPORT_FORGE_S3_SECRET_ACCESS_KEY: minioadmin
       SIGNING_SECRET: reportforge-compose-signing-secret
+    init: true
+    mem_limit: 512m
+    pids_limit: 256
     ports:
       - "4000:4000"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     command: >
       sh -c "
       bin/report_forge eval 'ReportForge.Release.migrate()' &&
@@ -85,7 +96,7 @@ services:
     image: prom/prometheus:v3.3.0
     depends_on:
       reportforge:
-        condition: service_started
+        condition: service_healthy
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus

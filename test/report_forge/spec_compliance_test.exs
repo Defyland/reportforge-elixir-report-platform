@@ -329,6 +329,7 @@ defmodule ReportForge.SpecComplianceTest do
   test "ci workflow covers lint, tests, security, docker, openapi, and coverage" do
     ci_workflow = read_repo!(".github/workflows/ci.yml")
     dockerfile = read_repo!("Dockerfile")
+    compose = read_repo!("docker-compose.yml")
 
     Enum.each(@required_ci_snippets, fn snippet ->
       assert String.contains?(ci_workflow, snippet),
@@ -336,10 +337,32 @@ defmodule ReportForge.SpecComplianceTest do
     end)
 
     Enum.each(
-      ["mix release", "USER reportforge", "HEALTHCHECK", "bin/report_forge"],
+      [
+        "mix release",
+        "USER reportforge",
+        "HEALTHCHECK",
+        "/readyz",
+        "bin/report_forge",
+        "sha256:"
+      ],
       fn snippet ->
         assert String.contains?(dockerfile, snippet),
                "Dockerfile must include production release hardening: #{snippet}"
+      end
+    )
+
+    Enum.each(
+      [
+        "read_only: true",
+        "no-new-privileges:true",
+        "cap_drop:",
+        "pids_limit: 256",
+        "mem_limit: 512m",
+        "condition: service_healthy"
+      ],
+      fn snippet ->
+        assert String.contains?(compose, snippet),
+               "Compose runtime shape must include hardening control: #{snippet}"
       end
     )
 
