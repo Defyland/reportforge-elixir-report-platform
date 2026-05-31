@@ -29,6 +29,26 @@ if config_env() != :test do
   base_url = System.get_env("BASE_URL", "http://localhost:#{port}")
   signing_secret = read_secret!.("SIGNING_SECRET", default: "reportforge-dev-signing-secret")
   storage_adapter_name = System.get_env("REPORT_FORGE_ARTIFACT_STORAGE_ADAPTER", "local")
+  repo_pool_size = String.to_integer(System.get_env("REPORT_FORGE_DB_POOL_SIZE", "10"))
+
+  repo_config =
+    case System.get_env("DATABASE_URL") do
+      nil ->
+        [
+          username: System.get_env("REPORT_FORGE_DB_USER", "postgres"),
+          password: System.get_env("REPORT_FORGE_DB_PASSWORD", "postgres"),
+          hostname: System.get_env("REPORT_FORGE_DB_HOST", "127.0.0.1"),
+          port: String.to_integer(System.get_env("REPORT_FORGE_DB_PORT", "5432")),
+          database: System.get_env("REPORT_FORGE_DB_NAME", "report_forge_#{config_env()}"),
+          pool_size: repo_pool_size
+        ]
+
+      database_url ->
+        [
+          url: database_url,
+          pool_size: repo_pool_size
+        ]
+    end
 
   artifact_storage_adapter =
     case storage_adapter_name do
@@ -85,4 +105,11 @@ if config_env() != :test do
     artifact_storage_s3: artifact_storage_s3,
     signing_secret: signing_secret,
     server: System.get_env("PHX_SERVER", "true") != "false"
+
+  config :report_forge,
+         ReportForge.Repo,
+         Keyword.merge(repo_config,
+           stacktrace: config_env() == :dev,
+           show_sensitive_data_on_connection_error: config_env() == :dev
+         )
 end

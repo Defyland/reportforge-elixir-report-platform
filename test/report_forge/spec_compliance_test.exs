@@ -113,7 +113,8 @@ defmodule ReportForge.SpecComplianceTest do
     "actions/upload-artifact@v7",
     "DavidAnson/markdownlint-cli2-action@v23",
     "@redocly/cli@latest lint openapi.yaml",
-    "docker build -t reportforge-ci ."
+    "docker build -t reportforge-ci .",
+    "docker compose config"
   ]
 
   @observability_terms [
@@ -330,6 +331,7 @@ defmodule ReportForge.SpecComplianceTest do
     ci_workflow = read_repo!(".github/workflows/ci.yml")
     dockerfile = read_repo!("Dockerfile")
     compose = read_repo!("docker-compose.yml")
+    runtime_config = read_repo!("config/runtime.exs")
 
     Enum.each(@required_ci_snippets, fn snippet ->
       assert String.contains?(ci_workflow, snippet),
@@ -358,7 +360,10 @@ defmodule ReportForge.SpecComplianceTest do
         "cap_drop:",
         "pids_limit: 256",
         "mem_limit: 512m",
-        "condition: service_healthy"
+        "condition: service_healthy",
+        "reportforge-migrate:",
+        "service_completed_successfully",
+        "sha256:"
       ],
       fn snippet ->
         assert String.contains?(compose, snippet),
@@ -367,6 +372,11 @@ defmodule ReportForge.SpecComplianceTest do
     )
 
     refute String.contains?(dockerfile, ~s(CMD ["mix", "run", "--no-halt"]))
+
+    Enum.each(["DATABASE_URL", "REPORT_FORGE_DB_HOST", "ReportForge.Repo"], fn snippet ->
+      assert String.contains?(runtime_config, snippet),
+             "runtime release config must include database setting: #{snippet}"
+    end)
   end
 
   test "senior hardening gates cover consistency, pagination, rate limiting, and release shape" do
