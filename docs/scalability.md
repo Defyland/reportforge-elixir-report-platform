@@ -51,11 +51,12 @@ submissions, or large artifact downloads. Tenant-level rate limits and future
 quotas are the first mitigation before physical sharding.
 
 The current implementation uses a bounded local rate limiter backed by ETS with
-periodic expiry pruning and a maximum bucket count. It increments bucket counts
-atomically and rejects new buckets once capacity is reached. That is
-production-shaped for a single-node slice. Multi-node deployments should replace
-the adapter boundary with an ingress, Redis, or database-backed limiter so
-quotas are shared across nodes.
+periodic expiry pruning and a maximum bucket count. Existing buckets increment
+with atomic ETS counters; new-bucket admission is serialized through the
+GenServer owner so concurrent new keys cannot overrun the configured local
+capacity. That is production-shaped for a single-node slice. Multi-node
+deployments should replace the adapter boundary with an ingress, Redis, or
+database-backed limiter so quotas are shared across nodes.
 
 ## Horizontal Scaling
 

@@ -9,6 +9,8 @@ ReportForge needs an API process, Oban workers, PostgreSQL, and artifact storage
 - Health, readiness, metrics, traces, and structured logs.
 - Local and S3-compatible artifact storage paths.
 - Docker Compose and production-like smoke validation.
+- Digest-pinned release image bases, non-root runtime user, readiness
+  healthcheck, and Compose-level process hardening.
 
 ## Deferred platform work
 

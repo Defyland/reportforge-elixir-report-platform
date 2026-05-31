@@ -76,9 +76,9 @@ growing tables, queue buildup risks, hot tenant keys, horizontal scale paths,
 and consistency boundaries.
 
 The local rate limiter must be a bounded local rate limiter with expiry pruning,
-capacity limits, atomic bucket increments, and a documented multi-node
-replacement path. Production evaluation should see a clear boundary rather than
-an unbounded process map.
+capacity limits, serialized new-bucket admission, atomic bucket increments, and
+a documented multi-node replacement path. Production evaluation should see a
+clear boundary rather than an unbounded process map.
 
 ## Operational Cost Bar
 
@@ -118,7 +118,7 @@ integration, markdown, and Compose smoke validation.
 | Active report dedupe is scoped | `priv/repo/migrations/20260531010000_scope_report_fingerprint_dedupe_to_active_reports.exs`, `test/report_forge/reports_test.exs` | Done | Uses a partial active-report fingerprint index so failed/cancelled reports do not block legitimate retries. |
 | Storage side effects are outside long transactions | `lib/report_forge/reports.ex`, `test/report_forge/reports_test.exs` | Done | Completion writes storage outside the locked report transaction and compensates if finalization fails. |
 | Paginated report listings are enforced | `openapi.yaml`, `lib/report_forge/reports.ex`, `test/report_forge_web/router_test.exs` | Done | List responses expose `meta.pagination` with bounded `limit` and opaque `next_cursor`. |
-| Runtime hardening is production-shaped | `Dockerfile`, `docker-compose.yml`, `lib/report_forge/release.ex` | Done | Uses a release-based non-root container, container healthcheck, and release migration command. |
+| Runtime hardening is production-shaped | `Dockerfile`, `docker-compose.yml`, `lib/report_forge/release.ex` | Done | Uses digest-pinned base images, a release-based non-root container, container healthcheck against readiness, read-only Compose runtime controls, and release migration command. |
 | Tenant isolation is covered | `docs/security/authorization-matrix.md`, `test/report_forge_web/router_test.exs` | Done | Cross-tenant reads normalize to `404`. |
 | Financial export threat model exists | `docs/security/threat-model.md` | Done | Signed URLs, retention, storage, tenant access, and abuse cases. |
 | Observability evidence exists | `docs/architecture/observability.md`, `docs/architecture/grafana-dashboard.json`, `test/report_forge/otlp_export_test.exs` | Done | Trace propagation and OTLP export are tested. |

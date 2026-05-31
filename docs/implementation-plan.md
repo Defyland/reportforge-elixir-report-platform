@@ -52,7 +52,7 @@ Completed evidence:
 - `mix test` passes
 - `mix ci` passes
 - `bash scripts/validate_requirements.sh` passes
-- `npx @redocly/cli@latest lint openapi.yaml` passes with warnings only
+- `npx @redocly/cli@latest lint openapi.yaml` passes without warnings
 
 Remaining work:
 
@@ -166,7 +166,7 @@ Remaining work:
 - updated README, diagrams, runbooks, ADRs, and the implementation plan to reflect the PostgreSQL + Oban runtime that is actually shipping
 - ended this gate at `78.31%` total coverage with the Oban path enabled
 - added audit-style structured log events for tenant and report actions
-- reran the full gate with `mix ci`, `bash scripts/validate_requirements.sh`, `markdownlint`, and `redocly lint`, ending with `50` tests passing, `1` intentional MinIO skip in the default local run, `78.31%` total coverage, and `3` non-blocking OpenAPI warnings
+- reran the full gate with `mix ci`, `bash scripts/validate_requirements.sh`, `markdownlint`, and `redocly lint`, ending with a clean local suite, `1` intentional MinIO skip in the default local run, and no OpenAPI warnings
 - captured dated benchmark evidence under [benchmarks/results/2026-05-29](../benchmarks/results/2026-05-29/README.md), including a rate-limit failure mode and a benchmark-tuned passing load profile
 - made tenant rate limits configurable by environment so benchmark runs can isolate queue and persistence behavior without changing product defaults
 - added persistent audit storage for privileged tenant and report actions, backed by dedicated tests
@@ -183,6 +183,10 @@ Remaining work:
 - added `:telemetry` events as the source for Prometheus counters
 - added the spec-driven senior readiness package, product docs, domain docs, architecture C4 docs, security docs, scalability notes, operational cost notes, and engineering case study
 - aligned report lifecycle worker events with the canonical `report.progress_updated`, `report.uploaded`, and `report.completed` contract
+- serialized rate-limiter new-bucket admission and added a concurrent capacity test
+- tightened operational OpenAPI schemas and removed Redocly warnings
+- pinned Docker base images by digest, moved the container healthcheck to `/readyz`, and added Compose runtime hardening controls
+- reran the repository gate at `59` tests passing, `1` intentional MinIO skip, and warning-free OpenAPI lint
 - split the work into atomic Conventional Commits on branch `codex/reportforge-implementation`
 
 ## Blockers that still prevent full completion

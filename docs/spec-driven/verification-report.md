@@ -2,66 +2,72 @@
 
 ## Summary
 
-This change set closes the senior/tech-lead hardening gaps for the current
-portfolio slice: report completion no longer holds row locks while writing
-artifact bytes, failed/cancelled reports no longer block legitimate equivalent
-submissions, report listing is paginated, the OpenAPI contract is stricter, the
-local rate limiter is bounded, and the container now uses a release-based
-non-root runtime with a healthcheck. Final repository validation passes locally.
+This change set closes the remaining repository-level quality gaps that did not
+depend on external infrastructure: local rate-limit capacity admission is
+serialized under concurrency, operational OpenAPI endpoints validate without
+lint warnings, and the application container is closer to production shape with
+digest-pinned base images, readiness healthcheck, non-root execution, and
+Compose runtime hardening. Final repository validation passes locally.
 
 ## Commands Run
 
-- `MIX_ENV=test REPORT_FORGE_DB_PORT=55432 mix ecto.migrate`: passed and applied
-  `20260531010000_scope_report_fingerprint_dedupe_to_active_reports.exs`.
-- `mix format`: passed after applying the hardening changes.
 - `mix format --check-formatted`: passed.
 - `REPORT_FORGE_DB_PORT=55432 mix compile --warnings-as-errors`: passed.
-- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/reports_test.exs test/report_forge_web/router_test.exs test/report_forge_web/openapi_contract_test.exs test/report_forge/spec_compliance_test.exs`:
-  passed, `29 tests, 0 failures`.
-- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/rate_limiter_test.exs test/report_forge_web/router_test.exs test/report_forge/spec_compliance_test.exs`:
-  passed, `21 tests, 0 failures`.
-- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/reports_test.exs --max-failures 1`:
+- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/rate_limiter_test.exs`:
+  passed, `3 tests, 0 failures`.
+- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge_web/openapi_contract_test.exs`:
+  passed, `3 tests, 0 failures`.
+- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/spec_compliance_test.exs`:
   passed, `9 tests, 0 failures`.
 - `REPORT_FORGE_DB_PORT=55432 mix test`: passed,
-  `57 tests, 0 failures, 1 skipped`.
+  `59 tests, 0 failures, 1 skipped`.
 - `REPORT_FORGE_DB_PORT=55432 mix credo --strict`: passed,
-  `found no issues`.
+  `530 mods/funs, found no issues`.
 - `REPORT_FORGE_DB_PORT=55432 mix sobelow --ignore Config.HTTPS --skip --exit`:
-  passed, `No vulnerabilities found.`
-- `REPORT_FORGE_DB_PORT=55432 mix deps.audit`: passed.
+  passed with `SCAN COMPLETE`; Sobelow still reports that it cannot auto-detect
+  a Phoenix router because this service uses Plug directly.
+- `REPORT_FORGE_DB_PORT=55432 mix deps.audit`: passed,
+  `No vulnerabilities found.`
 - `bash scripts/validate_requirements.sh`: passed with
   `Repository baseline structure validated.`
-- `npx @redocly/cli@latest lint openapi.yaml`: passed; OpenAPI is valid with
-  `3` non-blocking warnings for unauthenticated health/readiness/metrics routes
-  lacking `4XX` responses.
-- `docker build -t reportforge-ci .`: passed and assembled the prod release.
+- `npx @redocly/cli@latest lint openapi.yaml`: passed; OpenAPI is valid with no
+  warnings.
+- `git diff --check`: passed.
+- `docker compose config >/tmp/reportforge-compose-config.yml`: passed.
+- `docker build -t reportforge-ci .`: passed using the digest-pinned build and
+  runtime base images.
 - `docker image inspect reportforge-ci --format '{{.Config.User}} {{json .Config.Healthcheck.Test}}'`:
-  confirmed `reportforge` user and the `/healthz` healthcheck.
+  confirmed `reportforge` user and the `/readyz` healthcheck.
 
 ## Passing Criteria
 
 - No external artifact-storage side effects occur inside long report row-lock
   transactions.
 - Equivalent report fingerprints are deduplicated only while a report is
-  `queued`, `running`, or `succeeded`; failed/cancelled reports no longer block
+  `queued`, `running`, or `succeeded`; failed/cancelled reports do not block
   new legitimate submissions.
 - `GET /api/v1/reports` supports bounded cursor pagination and returns
   `meta.pagination`.
 - Response schemas are stricter in OpenAPI and contract tests reject unexpected
   properties where `additionalProperties: false` is declared.
-- Rate limiting is ETS-backed, bounded by configured bucket capacity, atomically
-  increments bucket counts, and prunes expired buckets.
-- Docker uses a Mix release, non-root `reportforge` user, CA certificates, and a
-  container healthcheck.
-- Spec-driven docs and compliance tests now enforce the senior hardening bar.
+- Operational endpoints declare client-error responses, health/readiness schemas
+  are strict, and Redocly lint is warning-free.
+- Rate limiting is ETS-backed, bounded by configured bucket capacity, prunes
+  expired buckets, atomically increments existing buckets, and serializes
+  concurrent new-bucket admission.
+- Docker uses a Mix release, digest-pinned base images, non-root `reportforge`
+  user, CA certificates, and a readiness-based container healthcheck.
+- Compose renders with local runtime hardening controls: read-only app
+  filesystem, `/tmp` tmpfs, dropped capabilities, `no-new-privileges`, PID
+  limit, CPU limit, memory limit, and Prometheus gated on app health.
+- Spec-driven docs and compliance tests enforce the senior hardening bar.
 
 ## Partial Criteria
 
-- Redocly reports three warnings for public operational endpoints without `4XX`
-  responses. The contract is valid and this is not blocking for the current
-  slice.
 - The local rate limiter is intentionally single-node. Multi-node shared quotas
-  are documented as an ingress, Redis, or database-backed replacement path.
+  remain documented as an ingress, Redis, or database-backed replacement path.
+- Docker Compose proves a production-like local topology, not the final
+  deployment mechanism for a managed environment.
 
 ## Failed or Blocked Criteria
 

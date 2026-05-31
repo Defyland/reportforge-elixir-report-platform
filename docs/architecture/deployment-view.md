@@ -15,12 +15,19 @@ engineering validation:
 This topology validates the shape of the service without claiming that the
 repository already provisions production infrastructure.
 
-The application container is a release-based non-root container. The Compose
-stack runs release migrations through `ReportForge.Release.migrate/0` before
-starting `bin/report_forge`, which is close to a production deployment shape
-without requiring external managed services. The image also declares a
-container healthcheck against `/healthz` so orchestrators and Compose can detect
-process-level failures.
+The application container is a release-based non-root container built from
+digest-pinned base images. The Compose stack runs release migrations through
+`ReportForge.Release.migrate/0` before starting `bin/report_forge`, which is
+close to a production deployment shape without requiring external managed
+services. The image declares a container healthcheck against `/readyz` so
+orchestrators and Compose gate dependents on database, Oban, and signer
+readiness rather than only process liveness.
+
+The local Compose service also enables runtime hardening controls that are
+available without a cluster: `read_only: true`, `/tmp` as `tmpfs`,
+`no-new-privileges`, dropped Linux capabilities, PID limit, CPU limit, and
+memory limit. These controls are intentionally local/prod-like guardrails, not
+a replacement for a target platform security policy.
 
 ## Runtime Configuration
 

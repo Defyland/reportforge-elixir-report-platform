@@ -12,15 +12,16 @@ This repository is production-shaped, but not a turnkey production deployment. T
 - OpenAPI contract plus live response contract tests
 - structured logs, request/correlation IDs, OpenTelemetry trace propagation, `:telemetry` events, and Prometheus exposition
 - CI-oriented gates for format, compile warnings, Credo, Sobelow, dependency audit, tests, coverage, OpenAPI lint, Docker build, real MinIO storage integration, and production-like Compose smoke testing
-- local production-like stack with PostgreSQL, MinIO, OpenTelemetry Collector, Prometheus, Grafana, and executable smoke checks
+- local production-like stack with PostgreSQL, MinIO, OpenTelemetry Collector, Prometheus, Grafana, executable smoke checks, and hardened application-container runtime controls
 
 ## Current validation evidence
 
-- `mix ci`: 50 tests passing, 1 intentional MinIO skip in the default local run, 78.31% coverage
+- `mix test`: full local suite passing with the current PostgreSQL-backed runtime
 - `REPORT_FORGE_MINIO_INTEGRATION=1 mix test ... --include minio`: real MinIO adapter test passing
-- `docker build -t reportforge-ci .`: production image build passing
+- `docker build -t reportforge-ci .`: production image build passing from digest-pinned base images
+- `docker compose config`: Compose topology and local hardening controls render successfully
 - `docker compose up -d` plus `scripts/smoke.sh`: end-to-end API, Oban, PostgreSQL, MinIO, metrics, and artifact download path passing
-- `npx @redocly/cli@latest lint openapi.yaml`: valid OpenAPI with 3 non-blocking warnings for unauthenticated operational endpoints
+- `npx @redocly/cli@latest lint openapi.yaml`: valid OpenAPI with no warnings
 
 ## Missing before 100% production-ready
 
