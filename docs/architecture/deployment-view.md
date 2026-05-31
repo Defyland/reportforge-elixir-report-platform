@@ -16,12 +16,19 @@ This topology validates the shape of the service without claiming that the
 repository already provisions production infrastructure.
 
 The application container is a release-based non-root container built from
-digest-pinned base images. The Compose stack runs release migrations through
-`ReportForge.Release.migrate/0` before starting `bin/report_forge`, which is
-close to a production deployment shape without requiring external managed
-services. The image declares a container healthcheck against `/readyz` so
-orchestrators and Compose gate dependents on database, Oban, and signer
-readiness rather than only process liveness.
+digest-pinned base images. Runtime database settings are read in
+`config/runtime.exs`, so release containers honor `DATABASE_URL` or
+`REPORT_FORGE_DB_*` environment variables instead of baking build-time database
+defaults into the image.
+
+The Compose stack runs release migrations through a one-shot
+`reportforge-migrate` service that executes `ReportForge.Release.migrate/0`.
+The API container starts only after that service completes successfully. This is
+closer to a production deployment shape than running migrations inline in the
+long-lived API process, while still avoiding external managed services. The
+image declares a container healthcheck against `/readyz` so orchestrators and
+Compose gate dependents on database, Oban, and signer readiness rather than
+only process liveness.
 
 The local Compose service also enables runtime hardening controls that are
 available without a cluster: `read_only: true`, `/tmp` as `tmpfs`,
@@ -29,11 +36,21 @@ available without a cluster: `read_only: true`, `/tmp` as `tmpfs`,
 memory limit. These controls are intentionally local/prod-like guardrails, not
 a replacement for a target platform security policy.
 
+Public host ports are parameterized for shared developer machines and CI
+reruns. For example, `REPORT_FORGE_HOST_PORT=4400 docker compose up -d --build`
+keeps the app listening on container port `4000` while publishing it on host
+port `4400`.
+
 ## Runtime Configuration
 
 Important environment variables include:
 
 - `DATABASE_URL`
+- `REPORT_FORGE_DB_HOST`
+- `REPORT_FORGE_DB_PORT`
+- `REPORT_FORGE_DB_NAME`
+- `REPORT_FORGE_DB_USER`
+- `REPORT_FORGE_DB_PASSWORD`
 - `SIGNING_SECRET` or `SIGNING_SECRET_FILE`
 - `REPORT_FORGE_ARTIFACT_STORAGE_ADAPTER`
 - `REPORT_FORGE_S3_BUCKET`

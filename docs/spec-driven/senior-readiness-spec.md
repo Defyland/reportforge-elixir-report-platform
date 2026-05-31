@@ -102,6 +102,11 @@ CI must cover format, compile warnings, lint, security scan, dependency audit,
 migrations, tests, coverage, database integration, OpenAPI, Docker build, MinIO
 integration, markdown, and Compose smoke validation.
 
+Release containers must read database settings at runtime, not at image build
+time. Compose must model migrations as a one-shot job before the API process,
+pin operational images by digest, and keep host ports configurable for repeated
+local and CI smoke runs.
+
 ## Evidence Matrix
 
 | Criterion | Evidence | Status | Notes |
@@ -112,13 +117,13 @@ integration, markdown, and Compose smoke validation.
 | Aggregates and invariants are documented | `docs/domain/aggregates.md`, `docs/domain/invariants.md` | Done | Includes tenant ownership, idempotency, artifact TTL, and lifecycle. |
 | State machine is documented and tested | `docs/domain/state-machines.md`, `test/report_forge/reports/worker_test.exs` | Done | Worker test validates canonical lifecycle events. |
 | Architecture boundaries are explicit | `docs/architecture/module-boundaries.md`, `docs/architecture/overview.md` | Done | Web, Identity, Reports, Storage, Runtime, and Ops boundaries. |
-| Deployment shape is documented | `docs/architecture/deployment-view.md`, `docker-compose.yml` | Done | Compose proves API, DB, Oban, MinIO, OTel, Prometheus, Grafana. |
+| Deployment shape is documented | `docs/architecture/deployment-view.md`, `docker-compose.yml` | Done | Compose proves API, release migration, DB, Oban, MinIO, OTel, Prometheus, Grafana. |
 | API contract exists | `openapi.yaml`, `docs/api/http-examples.md`, `test/report_forge_web/openapi_contract_test.exs` | Done | Contract is linted and request-tested. |
 | Data consistency is documented | `docs/architecture/database-design.md`, `docs/scalability.md` | Done | Constraints, indexes, transactions, and strong consistency boundaries. |
 | Active report dedupe is scoped | `priv/repo/migrations/20260531010000_scope_report_fingerprint_dedupe_to_active_reports.exs`, `test/report_forge/reports_test.exs` | Done | Uses a partial active-report fingerprint index so failed/cancelled reports do not block legitimate retries. |
 | Storage side effects are outside long transactions | `lib/report_forge/reports.ex`, `test/report_forge/reports_test.exs` | Done | Completion writes storage outside the locked report transaction and compensates if finalization fails. |
 | Paginated report listings are enforced | `openapi.yaml`, `lib/report_forge/reports.ex`, `test/report_forge_web/router_test.exs` | Done | List responses expose `meta.pagination` with bounded `limit` and opaque `next_cursor`. |
-| Runtime hardening is production-shaped | `Dockerfile`, `docker-compose.yml`, `lib/report_forge/release.ex` | Done | Uses digest-pinned base images, a release-based non-root container, container healthcheck against readiness, read-only Compose runtime controls, and release migration command. |
+| Runtime hardening is production-shaped | `Dockerfile`, `docker-compose.yml`, `config/runtime.exs`, `lib/report_forge/release.ex` | Done | Uses digest-pinned base images, runtime DB config, a release-based non-root container, container healthcheck against readiness, read-only Compose runtime controls, and one-shot release migration service. |
 | Tenant isolation is covered | `docs/security/authorization-matrix.md`, `test/report_forge_web/router_test.exs` | Done | Cross-tenant reads normalize to `404`. |
 | Financial export threat model exists | `docs/security/threat-model.md` | Done | Signed URLs, retention, storage, tenant access, and abuse cases. |
 | Observability evidence exists | `docs/architecture/observability.md`, `docs/architecture/grafana-dashboard.json`, `test/report_forge/otlp_export_test.exs` | Done | Trace propagation and OTLP export are tested. |

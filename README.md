@@ -290,7 +290,17 @@ docker compose up -d --build
 BASE_URL=http://localhost:4000 bash scripts/smoke.sh
 ```
 
-The stack includes PostgreSQL, MinIO, ReportForge, OpenTelemetry Collector, Prometheus, and Grafana.
+If port `4000` is already in use, run the app on another host port without
+changing the container port:
+
+```sh
+REPORT_FORGE_HOST_PORT=4400 docker compose up -d --build
+BASE_URL=http://localhost:4400 bash scripts/smoke.sh
+```
+
+The stack includes PostgreSQL, MinIO, ReportForge, OpenTelemetry Collector,
+Prometheus, and Grafana. ReportForge migrations run through a one-shot
+`reportforge-migrate` service before the API starts.
 
 - API: `http://localhost:4000`
 - MinIO console: `http://localhost:9001`

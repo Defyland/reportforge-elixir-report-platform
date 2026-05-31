@@ -55,7 +55,7 @@ except reading shared specs from the repository root.
 | Partial active-report fingerprint index | Replace the global fingerprint uniqueness constraint with a partial index for `queued`, `running`, and `succeeded` reports. |
 | Paginated report listings | Add bounded `limit`/`cursor` support and return `meta.pagination` from `GET /api/v1/reports`. |
 | Bounded local rate limiter | Replace the process map with an ETS-backed bounded local rate limiter that prunes expired buckets, serializes new-bucket admission, caps bucket count, and documents the multi-node replacement path. |
-| Release-based non-root container | Build a Mix release in a multi-stage Dockerfile, pin base images by digest, run it as the `reportforge` user, declare a readiness healthcheck, and harden the Compose runtime controls. |
+| Release-based non-root container | Build a Mix release in a multi-stage Dockerfile, pin base images by digest, read database settings at runtime, run it as the `reportforge` user, declare a readiness healthcheck, harden the Compose runtime controls, and model migrations as a one-shot service. |
 
 ## Verification Commands
 

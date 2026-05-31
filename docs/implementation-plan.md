@@ -187,6 +187,10 @@ Remaining work:
 - tightened operational OpenAPI schemas and removed Redocly warnings
 - pinned Docker base images by digest, moved the container healthcheck to `/readyz`, and added Compose runtime hardening controls
 - reran the repository gate at `59` tests passing, `1` intentional MinIO skip, and warning-free OpenAPI lint
+- moved release database settings into `config/runtime.exs` so containers honor runtime `DATABASE_URL` or `REPORT_FORGE_DB_*` values
+- split Compose migration execution into the one-shot `reportforge-migrate` service and removed inline migrations from the long-lived API command
+- pinned Compose and CI operational images by digest and added `docker compose config` to CI validation
+- parameterized public Compose ports and proved the stack with `REPORT_FORGE_HOST_PORT=4400` plus `scripts/smoke.sh`
 - split the work into atomic Conventional Commits on branch `codex/reportforge-implementation`
 
 ## Blockers that still prevent full completion

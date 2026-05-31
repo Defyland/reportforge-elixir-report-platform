@@ -7,7 +7,10 @@ depend on external infrastructure: local rate-limit capacity admission is
 serialized under concurrency, operational OpenAPI endpoints validate without
 lint warnings, and the application container is closer to production shape with
 digest-pinned base images, readiness healthcheck, non-root execution, and
-Compose runtime hardening. Final repository validation passes locally.
+Compose runtime hardening. A follow-up runtime validation also moved database
+settings into release runtime config, split Compose migrations into a one-shot
+service, pinned Compose/CI operational images by digest, and proved the stack
+with an executable smoke test. Final repository validation passes locally.
 
 ## Commands Run
 
@@ -38,6 +41,11 @@ Compose runtime hardening. Final repository validation passes locally.
   runtime base images.
 - `docker image inspect reportforge-ci --format '{{.Config.User}} {{json .Config.Healthcheck.Test}}'`:
   confirmed `reportforge` user and the `/readyz` healthcheck.
+- `REPORT_FORGE_HOST_PORT=4400 docker compose up -d --build`: passed; the
+  `reportforge-migrate` service exited successfully before the API started.
+- `BASE_URL=http://localhost:4400 SMOKE_TIMEOUT_SECONDS=120 bash scripts/smoke.sh`:
+  passed and completed an end-to-end report download through the Compose stack.
+- `docker compose down -v`: passed after smoke validation.
 
 ## Passing Criteria
 
@@ -57,9 +65,16 @@ Compose runtime hardening. Final repository validation passes locally.
   concurrent new-bucket admission.
 - Docker uses a Mix release, digest-pinned base images, non-root `reportforge`
   user, CA certificates, and a readiness-based container healthcheck.
+- Release database settings are loaded at runtime from `DATABASE_URL` or
+  `REPORT_FORGE_DB_*`, so the container does not bake build-time database
+  defaults into the production image.
+- Compose models migrations as a one-shot `reportforge-migrate` service before
+  the long-lived API starts.
 - Compose renders with local runtime hardening controls: read-only app
   filesystem, `/tmp` tmpfs, dropped capabilities, `no-new-privileges`, PID
   limit, CPU limit, memory limit, and Prometheus gated on app health.
+- Compose and CI operational images are pinned by digest, and public host ports
+  are configurable for repeatable local smoke runs.
 - Spec-driven docs and compliance tests enforce the senior hardening bar.
 
 ## Partial Criteria

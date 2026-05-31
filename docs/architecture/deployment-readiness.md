@@ -11,6 +11,10 @@ ReportForge needs an API process, Oban workers, PostgreSQL, and artifact storage
 - Docker Compose and production-like smoke validation.
 - Digest-pinned release image bases, non-root runtime user, readiness
   healthcheck, and Compose-level process hardening.
+- Runtime database configuration through `config/runtime.exs`, including
+  `DATABASE_URL` and `REPORT_FORGE_DB_*` support for release containers.
+- One-shot `reportforge-migrate` Compose service before the long-lived API
+  process starts.
 
 ## Deferred platform work
 

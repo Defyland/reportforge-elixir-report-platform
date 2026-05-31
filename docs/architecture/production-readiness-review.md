@@ -20,7 +20,10 @@ This repository is production-shaped, but not a turnkey production deployment. T
 - `REPORT_FORGE_MINIO_INTEGRATION=1 mix test ... --include minio`: real MinIO adapter test passing
 - `docker build -t reportforge-ci .`: production image build passing from digest-pinned base images
 - `docker compose config`: Compose topology and local hardening controls render successfully
-- `docker compose up -d` plus `scripts/smoke.sh`: end-to-end API, Oban, PostgreSQL, MinIO, metrics, and artifact download path passing
+- `REPORT_FORGE_HOST_PORT=4400 docker compose up -d --build` plus
+  `BASE_URL=http://localhost:4400 bash scripts/smoke.sh`: end-to-end API,
+  release migration, Oban, PostgreSQL, MinIO, metrics, and artifact download
+  path passing
 - `npx @redocly/cli@latest lint openapi.yaml`: valid OpenAPI with no warnings
 
 ## Missing before 100% production-ready
