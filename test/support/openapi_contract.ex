@@ -128,6 +128,18 @@ defmodule ReportForge.OpenApiContract do
     end)
   end
 
+  defp validate_additional_properties(
+         %{"additionalProperties" => false, "properties" => properties},
+         value,
+         _contract,
+         path
+       ) do
+    value
+    |> Map.drop(Map.keys(properties))
+    |> Map.keys()
+    |> Enum.map(&"#{path} includes unexpected property #{&1}")
+  end
+
   defp validate_additional_properties(_schema, _value, _contract, _path), do: []
 
   defp resolve_ref(%{"$ref" => "#/" <> path}, contract) do

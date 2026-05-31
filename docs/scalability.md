@@ -18,6 +18,10 @@ Report status polling, lifecycle event reads, download URL requests, health,
 readiness, and metrics are read-heavy. These paths need tenant-scoped indexes
 and predictable payload sizes before they need caching.
 
+`GET /api/v1/reports` uses paginated report listings with bounded `limit` and an
+opaque cursor. This keeps tenant report scans from turning into unbounded API
+responses as the `reports` table grows.
+
 ## Write-Heavy Operations
 
 Report creation, lifecycle event insertion, audit logging, artifact metadata
@@ -46,6 +50,13 @@ large tenant can become hot through frequent polling, duplicate report
 submissions, or large artifact downloads. Tenant-level rate limits and future
 quotas are the first mitigation before physical sharding.
 
+The current implementation uses a bounded local rate limiter backed by ETS with
+periodic expiry pruning and a maximum bucket count. It increments bucket counts
+atomically and rejects new buckets once capacity is reached. That is
+production-shaped for a single-node slice. Multi-node deployments should replace
+the adapter boundary with an ingress, Redis, or database-backed limiter so
+quotas are shared across nodes.
+
 ## Horizontal Scaling
 
 The API can scale horizontally behind a load balancer because request state is
@@ -65,6 +76,11 @@ Strong consistency is required for tenant authorization, API-key lookup,
 idempotency, report state transitions, artifact metadata, and signed URL
 authorization. Eventual consistency is acceptable for dashboards, aggregate
 metrics, exported traces, and future notifications.
+
+No external side effects inside long database transactions are allowed in the
+report completion path. Storage writes happen outside the locked report-state
+transaction; finalization re-checks ownership and deletes the staged artifact if
+the report was cancelled or otherwise moved out of `running`.
 
 ## Deferred Scaling Work
 

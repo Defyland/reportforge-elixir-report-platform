@@ -59,12 +59,16 @@ defmodule ReportForgeWeb.Responses do
     error(conn, 422, "validation_failed", "Request body contains invalid fields.", details)
   end
 
-  def meta(conn) do
+  def meta(conn, opts \\ []) do
     %{
       request_id: conn.assigns[:request_id],
       correlation_id: conn.assigns[:correlation_id],
       trace_id: conn.assigns[:trace_id],
       timestamp: ReportForge.utc_now() |> ReportForge.to_iso8601()
     }
+    |> maybe_put_pagination(Keyword.get(opts, :pagination))
   end
+
+  defp maybe_put_pagination(meta, nil), do: meta
+  defp maybe_put_pagination(meta, pagination), do: Map.put(meta, :pagination, pagination)
 end

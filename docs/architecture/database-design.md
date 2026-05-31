@@ -26,7 +26,8 @@ That means the durable model is not only planned; it is already executable in th
 - unique `organizations.slug`
 - unique `api_keys.key_prefix`
 - unique `(organization_id, idempotency_key)` where `idempotency_key` is not null
-- index `(organization_id, fingerprint)` for deduplication lookups
+- partial active-report fingerprint index on `(organization_id, fingerprint)` for
+  reports in `queued`, `running`, or `succeeded`
 - index `(organization_id, status, inserted_at)` for report listing
 - index `(status, completed_at, failed_at, cancelled_at)` for retention cleanup
 - index `(report_id, inserted_at)` for event history playback
@@ -37,8 +38,14 @@ That means the durable model is not only planned; it is already executable in th
 - organization creation plus bootstrap API key issuance should be atomic
 - audit-log creation should never partially corrupt the primary business transaction
 - report acceptance and initial event creation should be atomic
-- report completion plus artifact metadata update should be atomic
+- report completion uses short row-lock transactions; No external side effects
+  inside long database transactions are allowed, so artifact bytes are staged
+  outside the locked report transaction and compensated if finalization fails
 - cleanup jobs should either delete matching rows fully or leave them untouched
+
+The partial active-report fingerprint index preserves deduplication while a
+report is queued, running, or already succeeded. Failed and cancelled reports do
+not block a legitimate new attempt with the same filters.
 
 ## Migration strategy
 

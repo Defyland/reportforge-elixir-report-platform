@@ -201,6 +201,18 @@ paths:
           schema:
             type: string
             enum: [csv, json, zip]
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: cursor
+          schema:
+            type: string
+          description: Opaque cursor returned in `meta.pagination.next_cursor`.
       responses:
         '200':
           description: Reports for the tenant
@@ -473,6 +485,7 @@ components:
     Meta:
       type: object
       required: [request_id, correlation_id, trace_id, timestamp]
+      additionalProperties: false
       properties:
         request_id:
           type: string
@@ -486,9 +499,22 @@ components:
           format: date-time
         deduplicated:
           type: boolean
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    Pagination:
+      type: object
+      required: [limit, next_cursor]
+      additionalProperties: false
+      properties:
+        limit:
+          type: integer
+        next_cursor:
+          type: string
+          nullable: true
     ErrorDetail:
       type: object
       required: [field, issue]
+      additionalProperties: false
       properties:
         field:
           type: string
@@ -497,6 +523,7 @@ components:
     ErrorBody:
       type: object
       required: [code, message, retryable, details]
+      additionalProperties: false
       properties:
         code:
           type: string
@@ -511,6 +538,7 @@ components:
     ErrorResponse:
       type: object
       required: [error, meta]
+      additionalProperties: false
       properties:
         error:
           $ref: '#/components/schemas/ErrorBody'
@@ -543,6 +571,7 @@ components:
     Organization:
       type: object
       required: [id, name, slug, retention_days, inserted_at, updated_at]
+      additionalProperties: false
       properties:
         id:
           type: string
@@ -561,6 +590,7 @@ components:
     ApiKey:
       type: object
       required: [id, name, key_prefix, token_hint, inserted_at, updated_at]
+      additionalProperties: false
       properties:
         id:
           type: string
@@ -587,6 +617,8 @@ components:
     ReportArtifact:
       type: object
       nullable: true
+      required: [filename, content_type, download_url, expires_at]
+      additionalProperties: false
       properties:
         filename:
           type: string
@@ -601,6 +633,8 @@ components:
     ReportError:
       type: object
       nullable: true
+      required: [code, message]
+      additionalProperties: false
       properties:
         code:
           type: string
@@ -608,6 +642,31 @@ components:
           type: string
     Report:
       type: object
+      required:
+        - id
+        - template_name
+        - format
+        - status
+        - requested_by
+        - filters
+        - columns
+        - idempotency_key
+        - fingerprint
+        - correlation_id
+        - progress_pct
+        - row_count
+        - byte_size
+        - checksum
+        - attempt_count
+        - artifact
+        - error
+        - inserted_at
+        - updated_at
+        - started_at
+        - completed_at
+        - failed_at
+        - cancelled_at
+      additionalProperties: false
       properties:
         id:
           type: string
@@ -674,6 +733,18 @@ components:
           nullable: true
     ReportEvent:
       type: object
+      required:
+        - id
+        - report_id
+        - event_type
+        - status
+        - progress_pct
+        - correlation_id
+        - trace_id
+        - span_id
+        - metadata
+        - inserted_at
+      additionalProperties: false
       properties:
         id:
           type: string
@@ -701,6 +772,8 @@ components:
           format: date-time
     DownloadLink:
       type: object
+      required: [report_id, url, filename, content_type, expires_at]
+      additionalProperties: false
       properties:
         report_id:
           type: string
@@ -763,9 +836,13 @@ components:
               additionalProperties: true
     OrganizationBootstrapResponse:
       type: object
+      required: [data, meta]
+      additionalProperties: false
       properties:
         data:
           type: object
+          required: [organization, bootstrap_api_key, api_key]
+          additionalProperties: false
           properties:
             organization:
               $ref: '#/components/schemas/Organization'
@@ -777,6 +854,8 @@ components:
           $ref: '#/components/schemas/Meta'
     OrganizationResponse:
       type: object
+      required: [data, meta]
+      additionalProperties: false
       properties:
         data:
           $ref: '#/components/schemas/Organization'
@@ -784,6 +863,8 @@ components:
           $ref: '#/components/schemas/Meta'
     ApiKeyResponse:
       type: object
+      required: [data, meta]
+      additionalProperties: false
       properties:
         data:
           $ref: '#/components/schemas/ApiKey'
@@ -791,9 +872,13 @@ components:
           $ref: '#/components/schemas/Meta'
     ApiKeyCreateResponse:
       type: object
+      required: [data, meta]
+      additionalProperties: false
       properties:
         data:
           type: object
+          required: [api_key, token]
+          additionalProperties: false
           properties:
             api_key:
               $ref: '#/components/schemas/ApiKey'
@@ -803,6 +888,8 @@ components:
           $ref: '#/components/schemas/Meta'
     ApiKeyListResponse:
       type: object
+      required: [data, meta]
+      additionalProperties: false
       properties:
         data:
           type: array
@@ -812,6 +899,8 @@ components:
           $ref: '#/components/schemas/Meta'
     ReportResponse:
       type: object
+      required: [data, meta]
+      additionalProperties: false
       properties:
         data:
           $ref: '#/components/schemas/Report'
@@ -819,6 +908,8 @@ components:
           $ref: '#/components/schemas/Meta'
     ReportListResponse:
       type: object
+      required: [data, meta]
+      additionalProperties: false
       properties:
         data:
           type: array
@@ -828,6 +919,8 @@ components:
           $ref: '#/components/schemas/Meta'
     ReportEventListResponse:
       type: object
+      required: [data, meta]
+      additionalProperties: false
       properties:
         data:
           type: array
@@ -837,6 +930,8 @@ components:
           $ref: '#/components/schemas/Meta'
     DownloadLinkResponse:
       type: object
+      required: [data, meta]
+      additionalProperties: false
       properties:
         data:
           $ref: '#/components/schemas/DownloadLink'

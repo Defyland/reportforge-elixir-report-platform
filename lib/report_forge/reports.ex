@@ -17,14 +17,44 @@ defmodule ReportForge.Reports do
   alias ReportForge.Telemetry
   alias ReportForge.Tracing
 
+  @default_page_limit 25
+  @max_page_limit 100
+  @active_deduplication_statuses ["queued", "running", "succeeded"]
+
   def list_reports(%Organization{id: organization_id}, filters \\ %{}) do
     Report
     |> where([report], report.organization_id == ^organization_id)
     |> maybe_filter_by_status(filters)
     |> maybe_filter_by_template(filters)
     |> maybe_filter_by_format(filters)
-    |> order_by([report], desc: report.inserted_at)
+    |> order_reports()
     |> Repo.all()
+  end
+
+  def list_reports_page(%Organization{id: organization_id}, filters \\ %{}) do
+    with {:ok, pagination} <- pagination_options(filters) do
+      reports =
+        Report
+        |> where([report], report.organization_id == ^organization_id)
+        |> maybe_filter_by_status(filters)
+        |> maybe_filter_by_template(filters)
+        |> maybe_filter_by_format(filters)
+        |> maybe_apply_cursor(pagination.cursor)
+        |> order_reports()
+        |> limit(^pagination.fetch_limit)
+        |> Repo.all()
+
+      {entries, next_cursor} = page_entries(reports, pagination.limit)
+
+      {:ok,
+       %{
+         entries: entries,
+         pagination: %{
+           limit: pagination.limit,
+           next_cursor: next_cursor
+         }
+       }}
+    end
   end
 
   def get_report(%Organization{id: organization_id}, report_id) do
@@ -512,108 +542,21 @@ defmodule ReportForge.Reports do
   end
 
   def complete_processing(report_id, artifact) do
-    case Repo.transaction(fn ->
-           case load_locked_report(report_id) do
-             %Report{status: "running"} = report ->
-               with {:ok, next_status} <- StateMachine.transition(report.status, :complete) do
-                 now = ReportForge.utc_now()
+    with {:ok, completion} <- prepare_completion(report_id),
+         {:ok, stored_artifact} <- put_completion_artifact(completion, artifact),
+         {:ok, result} <- finalize_completion(completion, artifact, stored_artifact) do
+      {:ok, result}
+    else
+      {:error, %Changeset{} = changeset} ->
+        {:error, {:validation_failed, translate_changeset_errors(changeset)}}
 
-                 download_expires_at =
-                   DateTime.add(
-                     now,
-                     Application.get_env(:report_forge, :report_ttl_seconds, 86_400),
-                     :second
-                   )
+      {:error, reason} ->
+        {:error, reason}
 
-                 token =
-                   Signing.sign_download(%{
-                     report_id: report.id,
-                     organization_id: report.organization_id,
-                     exp: DateTime.to_unix(download_expires_at)
-                   })
-
-                 with {:ok, stored_artifact} <-
-                        ArtifactStorage.put_artifact(%{
-                          id: ReportForge.generate_id("art"),
-                          report_id: report.id,
-                          organization_id: report.organization_id,
-                          token: token,
-                          body: artifact.body,
-                          filename: artifact.filename,
-                          content_type: artifact.content_type,
-                          expires_at: download_expires_at
-                        }),
-                      {:ok, _uploaded_event} <-
-                        persist_event(
-                          event(
-                            report.id,
-                            report.correlation_id,
-                            "report.uploaded",
-                            report.status,
-                            90,
-                            %{
-                              "storage_key" => stored_artifact.storage_key,
-                              "byte_size" => stored_artifact.byte_size,
-                              "checksum" => stored_artifact.checksum,
-                              "content_type" => stored_artifact.content_type
-                            }
-                          )
-                        ),
-                      {:ok, updated_report} <-
-                        update_report(report, %{
-                          status: next_status,
-                          progress_pct: 100,
-                          row_count: artifact.row_count,
-                          byte_size: artifact.byte_size,
-                          checksum: artifact.checksum,
-                          execution_job_id: nil,
-                          artifact_token: token,
-                          artifact_filename: artifact.filename,
-                          artifact_content_type: artifact.content_type,
-                          download_expires_at: download_expires_at,
-                          completed_at: now,
-                          last_error_code: nil,
-                          last_error: nil,
-                          updated_at: now
-                        }),
-                      {:ok, _completed_event} <-
-                        persist_event(
-                          event(
-                            report.id,
-                            report.correlation_id,
-                            "report.completed",
-                            updated_report.status,
-                            updated_report.progress_pct,
-                            %{
-                              "row_count" => artifact.row_count,
-                              "byte_size" => artifact.byte_size,
-                              "checksum" => artifact.checksum
-                            }
-                          )
-                        ) do
-                   %{report: updated_report, duration_ms: duration_ms(report.started_at, now)}
-                 else
-                   {:error, %Changeset{} = changeset} ->
-                     Repo.rollback(changeset)
-
-                   {:error, {error_code, error_message}} ->
-                     Repo.rollback({error_code, error_message})
-                 end
-               else
-                 :error ->
-                   Repo.rollback({:conflict, "report cannot be completed from its current state"})
-               end
-
-             %Report{status: "cancelled"} ->
-               Repo.rollback(:cancelled)
-
-             %Report{status: status} ->
-               Repo.rollback({status, "report cannot be completed from its current state"})
-
-             nil ->
-               Repo.rollback(:not_found)
-           end
-         end) do
+      :cancelled ->
+        {:error, :cancelled}
+    end
+    |> case do
       {:ok, %{report: updated_report, duration_ms: duration_ms}} ->
         Telemetry.report_completed(updated_report.status, duration_ms)
 
@@ -631,8 +574,8 @@ defmodule ReportForge.Reports do
       {:error, :not_found} ->
         {:error, :not_found}
 
-      {:error, {status, message}} when is_binary(status) ->
-        {:error, {status, message}}
+      {:error, {status_or_code, message}} when is_binary(status_or_code) ->
+        {:error, {status_or_code, message}}
 
       {:error, {:conflict, _message} = conflict} ->
         {:error, conflict}
@@ -640,6 +583,150 @@ defmodule ReportForge.Reports do
       {:error, %Changeset{} = changeset} ->
         {:error, {:validation_failed, translate_changeset_errors(changeset)}}
     end
+  end
+
+  defp prepare_completion(report_id) do
+    Repo.transaction(fn ->
+      case load_locked_report(report_id) do
+        %Report{status: "running"} = report ->
+          case StateMachine.transition(report.status, :complete) do
+            {:ok, next_status} ->
+              now = ReportForge.utc_now()
+              download_expires_at = DateTime.add(now, report_ttl_seconds(), :second)
+
+              token =
+                Signing.sign_download(%{
+                  report_id: report.id,
+                  organization_id: report.organization_id,
+                  exp: DateTime.to_unix(download_expires_at)
+                })
+
+              %{
+                report_id: report.id,
+                organization_id: report.organization_id,
+                correlation_id: report.correlation_id,
+                started_at: report.started_at,
+                next_status: next_status,
+                completed_at: now,
+                download_expires_at: download_expires_at,
+                token: token
+              }
+
+            :error ->
+              Repo.rollback({:conflict, "report cannot be completed from its current state"})
+          end
+
+        %Report{status: "cancelled"} ->
+          Repo.rollback(:cancelled)
+
+        %Report{status: status} ->
+          Repo.rollback({status, "report cannot be completed from its current state"})
+
+        nil ->
+          Repo.rollback(:not_found)
+      end
+    end)
+  end
+
+  defp put_completion_artifact(completion, artifact) do
+    ArtifactStorage.put_artifact(%{
+      id: ReportForge.generate_id("art"),
+      report_id: completion.report_id,
+      organization_id: completion.organization_id,
+      token: completion.token,
+      body: artifact.body,
+      filename: artifact.filename,
+      content_type: artifact.content_type,
+      expires_at: completion.download_expires_at
+    })
+  end
+
+  defp finalize_completion(completion, artifact, stored_artifact) do
+    case finalize_completion_transaction(completion, artifact, stored_artifact) do
+      {:ok, result} ->
+        {:ok, result}
+
+      {:error, reason} = error ->
+        _deleted_count = ArtifactStorage.delete_for_report(completion.report_id)
+
+        case reason do
+          :cancelled -> {:error, :cancelled}
+          _other -> error
+        end
+    end
+  end
+
+  defp finalize_completion_transaction(completion, artifact, stored_artifact) do
+    Repo.transaction(fn ->
+      case load_locked_report(completion.report_id) do
+        %Report{status: "running"} = report ->
+          with {:ok, _uploaded_event} <-
+                 persist_event(
+                   event(
+                     report.id,
+                     report.correlation_id,
+                     "report.uploaded",
+                     report.status,
+                     90,
+                     %{
+                       "storage_key" => stored_artifact.storage_key,
+                       "byte_size" => stored_artifact.byte_size,
+                       "checksum" => stored_artifact.checksum,
+                       "content_type" => stored_artifact.content_type
+                     }
+                   )
+                 ),
+               {:ok, updated_report} <-
+                 update_report(report, %{
+                   status: completion.next_status,
+                   progress_pct: 100,
+                   row_count: artifact.row_count,
+                   byte_size: artifact.byte_size,
+                   checksum: artifact.checksum,
+                   execution_job_id: nil,
+                   artifact_token: completion.token,
+                   artifact_filename: artifact.filename,
+                   artifact_content_type: artifact.content_type,
+                   download_expires_at: completion.download_expires_at,
+                   completed_at: completion.completed_at,
+                   last_error_code: nil,
+                   last_error: nil,
+                   updated_at: completion.completed_at
+                 }),
+               {:ok, _completed_event} <-
+                 persist_event(
+                   event(
+                     report.id,
+                     report.correlation_id,
+                     "report.completed",
+                     updated_report.status,
+                     updated_report.progress_pct,
+                     %{
+                       "row_count" => artifact.row_count,
+                       "byte_size" => artifact.byte_size,
+                       "checksum" => artifact.checksum
+                     }
+                   )
+                 ) do
+            %{
+              report: updated_report,
+              duration_ms: duration_ms(completion.started_at, completion.completed_at)
+            }
+          else
+            {:error, %Changeset{} = changeset} ->
+              Repo.rollback(changeset)
+          end
+
+        %Report{status: "cancelled"} ->
+          Repo.rollback(:cancelled)
+
+        %Report{status: status} ->
+          Repo.rollback({status, "report cannot be completed from its current state"})
+
+        nil ->
+          Repo.rollback(:not_found)
+      end
+    end)
   end
 
   def schedule_processing_retry(report_id, error_code, error_message, attempt, max_attempts) do
@@ -800,7 +887,7 @@ defmodule ReportForge.Reports do
         where:
           report.organization_id == ^organization_id and
             report.fingerprint == ^fingerprint and
-            report.status in ^["queued", "running", "succeeded"],
+            report.status in ^@active_deduplication_statuses,
         limit: 1
       )
     )
@@ -874,6 +961,110 @@ defmodule ReportForge.Reports do
 
   defp maybe_filter_by_format(query, _filters), do: query
 
+  defp maybe_apply_cursor(query, nil), do: query
+
+  defp maybe_apply_cursor(query, %{inserted_at: inserted_at, id: id}) do
+    where(
+      query,
+      [report],
+      report.inserted_at < ^inserted_at or
+        (report.inserted_at == ^inserted_at and report.id < ^id)
+    )
+  end
+
+  defp order_reports(query),
+    do: order_by(query, [report], desc: report.inserted_at, desc: report.id)
+
+  defp pagination_options(filters) do
+    with {:ok, limit} <- page_limit(filters),
+         {:ok, cursor} <- page_cursor(filters) do
+      {:ok, %{limit: limit, fetch_limit: limit + 1, cursor: cursor}}
+    end
+  end
+
+  defp page_limit(filters) do
+    default = Application.get_env(:report_forge, :report_list_default_limit, @default_page_limit)
+    max_limit = Application.get_env(:report_forge, :report_list_max_limit, @max_page_limit)
+    raw_limit = read_filter(filters, "limit")
+
+    case parse_positive_integer(raw_limit, default) do
+      {:ok, limit} when limit <= max_limit ->
+        {:ok, limit}
+
+      {:ok, _limit} ->
+        {:error,
+         {:validation_failed,
+          [%{field: "limit", issue: "must be less than or equal to #{max_limit}"}]}}
+
+      :error ->
+        {:error, {:validation_failed, [%{field: "limit", issue: "must be a positive integer"}]}}
+    end
+  end
+
+  defp page_cursor(filters) do
+    case read_filter(filters, "cursor") do
+      nil -> {:ok, nil}
+      "" -> {:ok, nil}
+      cursor -> decode_cursor(cursor)
+    end
+  end
+
+  defp page_entries(reports, limit) do
+    entries = Enum.take(reports, limit)
+
+    next_cursor =
+      if length(reports) > limit,
+        do: encode_cursor(List.last(entries)),
+        else: nil
+
+    {entries, next_cursor}
+  end
+
+  defp encode_cursor(%Report{} = report) do
+    %{
+      "inserted_at" => ReportForge.to_iso8601(report.inserted_at),
+      "id" => report.id
+    }
+    |> Jason.encode!()
+    |> Base.url_encode64(padding: false)
+  end
+
+  defp decode_cursor(cursor) when is_binary(cursor) do
+    with {:ok, json} <- Base.url_decode64(cursor, padding: false),
+         {:ok, %{"inserted_at" => inserted_at, "id" => id}} <- Jason.decode(json),
+         {:ok, datetime, _offset} <- DateTime.from_iso8601(inserted_at),
+         true <- is_binary(id) and id != "" do
+      {:ok, %{inserted_at: datetime, id: id}}
+    else
+      _error ->
+        {:error, {:validation_failed, [%{field: "cursor", issue: "must be a valid page cursor"}]}}
+    end
+  end
+
+  defp decode_cursor(_cursor),
+    do: {:error, {:validation_failed, [%{field: "cursor", issue: "must be a string"}]}}
+
+  defp parse_positive_integer(nil, default), do: {:ok, default}
+  defp parse_positive_integer("", default), do: {:ok, default}
+
+  defp parse_positive_integer(value, _default) when is_integer(value) and value > 0,
+    do: {:ok, value}
+
+  defp parse_positive_integer(value, _default) when is_binary(value) do
+    case Integer.parse(value) do
+      {parsed, ""} when parsed > 0 -> {:ok, parsed}
+      _other -> :error
+    end
+  end
+
+  defp parse_positive_integer(_value, _default), do: :error
+
+  defp read_filter(filters, key) do
+    Map.get(filters, key) || Map.get(filters, String.to_existing_atom(key))
+  rescue
+    ArgumentError -> Map.get(filters, key)
+  end
+
   defp event(report_id, correlation_id, event_type, status, progress_pct, metadata) do
     trace_metadata = Tracing.trace_metadata()
 
@@ -884,11 +1075,19 @@ defmodule ReportForge.Reports do
       status: status,
       progress_pct: progress_pct,
       correlation_id: correlation_id,
-      trace_id: trace_metadata[:trace_id],
-      span_id: trace_metadata[:span_id],
+      trace_id: trace_metadata[:trace_id] || generated_trace_id(),
+      span_id: trace_metadata[:span_id] || generated_span_id(),
       metadata: metadata,
       inserted_at: ReportForge.utc_now()
     }
+  end
+
+  defp generated_trace_id do
+    :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+  end
+
+  defp generated_span_id do
+    :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)
   end
 
   defp unique_error?(%Changeset{errors: errors}, field) do
@@ -915,4 +1114,8 @@ defmodule ReportForge.Reports do
 
   defp duration_ms(started_at, finished_at),
     do: DateTime.diff(finished_at, started_at, :millisecond)
+
+  defp report_ttl_seconds do
+    Application.get_env(:report_forge, :report_ttl_seconds, 86_400)
+  end
 end

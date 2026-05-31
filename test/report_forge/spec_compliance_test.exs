@@ -210,6 +210,11 @@ defmodule ReportForge.SpecComplianceTest do
     assert String.contains?(openapi, "Unauthorized")
     assert String.contains?(openapi, "RateLimited")
     assert String.contains?(openapi, "examples:")
+    assert String.contains?(openapi, "name: limit")
+    assert String.contains?(openapi, "name: cursor")
+    assert String.contains?(openapi, "Pagination:")
+    assert String.contains?(openapi, "required: [data, meta]")
+    assert String.contains?(openapi, "additionalProperties: false")
 
     Enum.each(@required_openapi_paths, fn path ->
       assert String.contains?(openapi, "#{path}:"),
@@ -323,11 +328,54 @@ defmodule ReportForge.SpecComplianceTest do
 
   test "ci workflow covers lint, tests, security, docker, openapi, and coverage" do
     ci_workflow = read_repo!(".github/workflows/ci.yml")
+    dockerfile = read_repo!("Dockerfile")
 
     Enum.each(@required_ci_snippets, fn snippet ->
       assert String.contains?(ci_workflow, snippet),
              "CI workflow is missing required step or command: #{snippet}"
     end)
+
+    Enum.each(
+      ["mix release", "USER reportforge", "HEALTHCHECK", "bin/report_forge"],
+      fn snippet ->
+        assert String.contains?(dockerfile, snippet),
+               "Dockerfile must include production release hardening: #{snippet}"
+      end
+    )
+
+    refute String.contains?(dockerfile, ~s(CMD ["mix", "run", "--no-halt"]))
+  end
+
+  test "senior hardening gates cover consistency, pagination, rate limiting, and release shape" do
+    senior_spec = read_repo!("docs/spec-driven/senior-readiness-spec.md")
+    implementation_plan = read_repo!("docs/spec-driven/implementation-plan.md")
+    database_design = read_repo!("docs/architecture/database-design.md")
+    scalability = read_repo!("docs/scalability.md")
+
+    migration =
+      read_repo!(
+        "priv/repo/migrations/20260531010000_scope_report_fingerprint_dedupe_to_active_reports.exs"
+      )
+
+    Enum.each(
+      [
+        "No external side effects inside long database transactions",
+        "partial active-report fingerprint index",
+        "paginated report listings",
+        "bounded local rate limiter",
+        "container healthcheck",
+        "release-based non-root container"
+      ],
+      fn term ->
+        assert String.contains?(
+                 senior_spec <> implementation_plan <> database_design <> scalability,
+                 term
+               ),
+               "senior hardening evidence must mention #{term}"
+      end
+    )
+
+    assert String.contains?(migration, "status IN ('queued', 'running', 'succeeded')")
   end
 
   test "benchmark docs include all required scenarios and measured result fields" do

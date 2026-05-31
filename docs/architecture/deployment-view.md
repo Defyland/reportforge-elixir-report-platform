@@ -15,6 +15,13 @@ engineering validation:
 This topology validates the shape of the service without claiming that the
 repository already provisions production infrastructure.
 
+The application container is a release-based non-root container. The Compose
+stack runs release migrations through `ReportForge.Release.migrate/0` before
+starting `bin/report_forge`, which is close to a production deployment shape
+without requiring external managed services. The image also declares a
+container healthcheck against `/healthz` so orchestrators and Compose can detect
+process-level failures.
+
 ## Runtime Configuration
 
 Important environment variables include:

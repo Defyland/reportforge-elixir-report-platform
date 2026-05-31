@@ -2,77 +2,75 @@
 
 ## Summary
 
-This change set applied the senior/spec-driven documentation package, connected
-the evidence to automated baseline checks, and aligned the report worker
-lifecycle with the canonical event contract. Final repository validation passes
-locally.
+This change set closes the senior/tech-lead hardening gaps for the current
+portfolio slice: report completion no longer holds row locks while writing
+artifact bytes, failed/cancelled reports no longer block legitimate equivalent
+submissions, report listing is paginated, the OpenAPI contract is stricter, the
+local rate limiter is bounded, and the container now uses a release-based
+non-root runtime with a healthcheck. Final repository validation passes locally.
 
 ## Commands Run
 
-- `mix format`: initially failed on an incomplete delimiter in
-  `lib/report_forge/reports.ex`; fixed and reran successfully.
-- `bash scripts/start_local_postgres.sh`: returned non-zero because the local
-  data directory already had a running postmaster; `pg_isready` confirmed port
-  `55432` was accepting connections.
-- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/reports/worker_test.exs`:
-  initially failed because the local test database had not applied
-  `20260529050000_add_object_storage_metadata_to_artifacts.exs`.
 - `MIX_ENV=test REPORT_FORGE_DB_PORT=55432 mix ecto.migrate`: passed and applied
-  the missing artifact metadata migration.
-- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/reports/worker_test.exs`:
-  passed, `3 tests, 0 failures`.
-- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/spec_compliance_test.exs`:
-  passed, `8 tests, 0 failures`.
+  `20260531010000_scope_report_fingerprint_dedupe_to_active_reports.exs`.
+- `mix format`: passed after applying the hardening changes.
 - `mix format --check-formatted`: passed.
+- `REPORT_FORGE_DB_PORT=55432 mix compile --warnings-as-errors`: passed.
+- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/reports_test.exs test/report_forge_web/router_test.exs test/report_forge_web/openapi_contract_test.exs test/report_forge/spec_compliance_test.exs`:
+  passed, `29 tests, 0 failures`.
+- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/rate_limiter_test.exs test/report_forge_web/router_test.exs test/report_forge/spec_compliance_test.exs`:
+  passed, `21 tests, 0 failures`.
+- `REPORT_FORGE_DB_PORT=55432 mix test test/report_forge/reports_test.exs --max-failures 1`:
+  passed, `9 tests, 0 failures`.
+- `REPORT_FORGE_DB_PORT=55432 mix test`: passed,
+  `57 tests, 0 failures, 1 skipped`.
+- `REPORT_FORGE_DB_PORT=55432 mix credo --strict`: passed,
+  `found no issues`.
+- `REPORT_FORGE_DB_PORT=55432 mix sobelow --ignore Config.HTTPS --skip --exit`:
+  passed, `No vulnerabilities found.`
+- `REPORT_FORGE_DB_PORT=55432 mix deps.audit`: passed.
 - `bash scripts/validate_requirements.sh`: passed with
   `Repository baseline structure validated.`
-- `python3 -m json.tool docs/events/report_lifecycle_event.v1.json` and
-  `python3 -m json.tool docs/events/report_progress_updated.v1.json`: passed.
-- `npx markdownlint-cli2 --fix README.md "docs/**/*.md" "benchmarks/**/*.md"`:
-  passed after fixing `MD012` blank-line issues introduced by new docs.
-- `git diff --check`: passed.
-- `dropdb -h 127.0.0.1 -p 55432 -U postgres report_forge_test_doc_ci 2>/dev/null || true`
-  followed by
-  `REPORT_FORGE_DB_PORT=55432 REPORT_FORGE_DB_NAME=report_forge_test_doc_ci mix ci`:
-  passed, `50 tests, 0 failures, 1 skipped`, `78.31%` total coverage.
 - `npx @redocly/cli@latest lint openapi.yaml`: passed; OpenAPI is valid with
   `3` non-blocking warnings for unauthenticated health/readiness/metrics routes
   lacking `4XX` responses.
+- `docker build -t reportforge-ci .`: passed and assembled the prod release.
+- `docker image inspect reportforge-ci --format '{{.Config.User}} {{json .Config.Healthcheck.Test}}'`:
+  confirmed `reportforge` user and the `/healthz` healthcheck.
 
 ## Passing Criteria
 
-- Required spec-driven docs exist under `docs/spec-driven/`.
-- Product docs exist under `docs/product/`.
-- Domain docs exist under `docs/domain/`.
-- Senior case study exists at `docs/engineering-case-study.md`.
-- C4/module/deployment architecture docs exist under `docs/architecture/`.
-- Security docs cover authorization, classification, secrets, abuse cases, and
-  financial export threat modeling.
-- Scalability and operational cost docs exist.
-- README links to the senior evidence package.
-- Shell baseline and ExUnit compliance tests enforce the new evidence.
-- Worker lifecycle events now match `requested`, `started`,
-  `progress_updated`, `uploaded`, `completed`, `failed`, and `cancelled`.
-- Full local `mix ci` passes against an isolated PostgreSQL test database.
+- No external artifact-storage side effects occur inside long report row-lock
+  transactions.
+- Equivalent report fingerprints are deduplicated only while a report is
+  `queued`, `running`, or `succeeded`; failed/cancelled reports no longer block
+  new legitimate submissions.
+- `GET /api/v1/reports` supports bounded cursor pagination and returns
+  `meta.pagination`.
+- Response schemas are stricter in OpenAPI and contract tests reject unexpected
+  properties where `additionalProperties: false` is declared.
+- Rate limiting is ETS-backed, bounded by configured bucket capacity, atomically
+  increments bucket counts, and prunes expired buckets.
+- Docker uses a Mix release, non-root `reportforge` user, CA certificates, and a
+  container healthcheck.
+- Spec-driven docs and compliance tests now enforce the senior hardening bar.
 
 ## Partial Criteria
 
-- `bash scripts/start_local_postgres.sh` is not idempotent when the same data
-  directory is already running. The database was usable, but the script itself
-  still returns non-zero instead of treating "already running" as success.
 - Redocly reports three warnings for public operational endpoints without `4XX`
   responses. The contract is valid and this is not blocking for the current
   slice.
+- The local rate limiter is intentionally single-node. Multi-node shared quotas
+  are documented as an ingress, Redis, or database-backed replacement path.
 
 ## Failed or Blocked Criteria
 
-- None remain for the repository-level spec-driven scope.
+- None remain for the repository-level senior/spec-driven scope.
 
 ## Remaining Risk
 
 - Production infrastructure remains intentionally out of scope: Kubernetes,
   Terraform, managed secret store, bucket lifecycle policy, real alert routing,
   and deployed load tests are still future production hardening.
-- The current change does not implement new exporters.
-- Artifact upload and metadata/event persistence still need future orphan-object
-  reconciliation before a high-volume production deployment.
+- High-volume production deployments should add orphan-object reconciliation and
+  provider-level object lifecycle policies.

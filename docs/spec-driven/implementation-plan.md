@@ -32,6 +32,10 @@ except reading shared specs from the repository root.
 - `lib/report_forge/reports.ex`
 - `test/report_forge/reports/worker_test.exs`
 - `docs/diagrams/report-lifecycle-sequence.md`
+- `priv/repo/migrations/20260531010000_scope_report_fingerprint_dedupe_to_active_reports.exs`
+- `lib/report_forge/release.ex`
+- `Dockerfile`
+- `docker-compose.yml`
 
 ## Acceptance Criteria Mapping
 
@@ -47,6 +51,11 @@ except reading shared specs from the repository root.
 | Documentation matches code | Rename worker lifecycle events to canonical `report.progress_updated` and `report.uploaded`. |
 | Baseline enforces evidence | Update shell baseline and ExUnit compliance test. |
 | Verification is reproducible | Record command results in `verification-report.md`. |
+| No external side effects inside long database transactions | Split report completion into short state checks, out-of-transaction artifact staging, and compensating cleanup if finalization loses ownership. |
+| Partial active-report fingerprint index | Replace the global fingerprint uniqueness constraint with a partial index for `queued`, `running`, and `succeeded` reports. |
+| Paginated report listings | Add bounded `limit`/`cursor` support and return `meta.pagination` from `GET /api/v1/reports`. |
+| Bounded local rate limiter | Replace the process map with an ETS-backed bounded local rate limiter that prunes expired buckets, caps bucket count, and documents the multi-node replacement path. |
+| Release-based non-root container | Build a Mix release in a multi-stage Dockerfile, run it as the `reportforge` user, and declare a container healthcheck. |
 
 ## Verification Commands
 

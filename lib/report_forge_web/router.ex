@@ -119,12 +119,14 @@ defmodule ReportForgeWeb.Router do
 
   get "/api/v1/reports" do
     with_auth(conn, :read, fn conn, organization, _api_key ->
-      reports = Reports.list_reports(organization, conn.params)
-
-      Responses.json(conn, 200, %{
-        data: Enum.map(reports, &Payloads.report/1),
-        meta: Responses.meta(conn)
-      })
+      with {:ok, page} <- Reports.list_reports_page(organization, conn.params) do
+        Responses.json(conn, 200, %{
+          data: Enum.map(page.entries, &Payloads.report/1),
+          meta: Responses.meta(conn, pagination: page.pagination)
+        })
+      else
+        {:error, reason} -> Responses.from_reason(conn, reason)
+      end
     end)
   end
 

@@ -250,4 +250,33 @@ defmodule ReportForgeWeb.RouterTest do
 
     assert unauthorized_conn.status == 401
   end
+
+  test "paginates report listings with opaque cursors" do
+    %{organization: organization, bootstrap_api_key: token} = Fixtures.organization_fixture()
+
+    Enum.each(1..3, fn row_limit ->
+      Fixtures.report_fixture(organization, %{"filters" => %{"row_limit" => row_limit}})
+    end)
+
+    first_page_conn = json_request(:get, "/api/v1/reports?limit=2", nil, [{"x-api-key", token}])
+    assert first_page_conn.status == 200
+
+    first_page = json_response(first_page_conn)
+    assert length(first_page["data"]) == 2
+    assert get_in(first_page, ["meta", "pagination", "limit"]) == 2
+    assert is_binary(get_in(first_page, ["meta", "pagination", "next_cursor"]))
+
+    next_cursor = get_in(first_page, ["meta", "pagination", "next_cursor"])
+
+    second_page_conn =
+      json_request(:get, "/api/v1/reports?limit=2&cursor=#{next_cursor}", nil, [
+        {"x-api-key", token}
+      ])
+
+    assert second_page_conn.status == 200
+
+    second_page = json_response(second_page_conn)
+    assert length(second_page["data"]) == 1
+    assert get_in(second_page, ["meta", "pagination", "next_cursor"]) == nil
+  end
 end

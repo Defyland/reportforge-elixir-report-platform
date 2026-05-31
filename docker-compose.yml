@@ -77,9 +77,8 @@ services:
       - "4000:4000"
     command: >
       sh -c "
-      mix ecto.create || true &&
-      mix ecto.migrate &&
-      mix run --no-halt
+      bin/report_forge eval 'ReportForge.Release.migrate()' &&
+      bin/report_forge start
       "
 
   prometheus:

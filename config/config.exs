@@ -26,9 +26,15 @@ config :report_forge,
   exporter_step_delay_ms: 15,
   default_row_limit: 25,
   max_row_limit: 500,
+  report_list_default_limit:
+    String.to_integer(System.get_env("REPORT_FORGE_REPORT_LIST_DEFAULT_LIMIT", "25")),
+  report_list_max_limit:
+    String.to_integer(System.get_env("REPORT_FORGE_REPORT_LIST_MAX_LIMIT", "100")),
   public_write_limit: String.to_integer(System.get_env("REPORT_FORGE_PUBLIC_WRITE_LIMIT", "20")),
   tenant_read_limit: String.to_integer(System.get_env("REPORT_FORGE_TENANT_READ_LIMIT", "240")),
-  tenant_write_limit: String.to_integer(System.get_env("REPORT_FORGE_TENANT_WRITE_LIMIT", "60"))
+  tenant_write_limit: String.to_integer(System.get_env("REPORT_FORGE_TENANT_WRITE_LIMIT", "60")),
+  rate_limit_max_buckets:
+    String.to_integer(System.get_env("REPORT_FORGE_RATE_LIMIT_MAX_BUCKETS", "50000"))
 
 config :report_forge, ReportForge.Repo,
   username: System.get_env("REPORT_FORGE_DB_USER", "postgres"),
