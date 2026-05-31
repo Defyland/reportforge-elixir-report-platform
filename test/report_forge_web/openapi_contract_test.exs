@@ -3,6 +3,25 @@ defmodule ReportForgeWeb.OpenApiContractTest do
 
   alias ReportForge.OpenApiContract
 
+  test "validates operational endpoints and their client-error contract" do
+    health_conn = json_request(:get, "/healthz")
+    ready_conn = json_request(:get, "/readyz")
+    metrics_conn = json_request(:get, "/metrics")
+
+    assert health_conn.status == 200
+    OpenApiContract.assert_response!(health_conn, "get", "/healthz")
+
+    assert ready_conn.status == 200
+    OpenApiContract.assert_response!(ready_conn, "get", "/readyz")
+
+    assert metrics_conn.status == 200
+    assert metrics_conn.resp_body =~ "reportforge_http_requests_total"
+
+    Enum.each(["/healthz", "/readyz", "/metrics"], fn path ->
+      OpenApiContract.assert_operation_has_4xx!("get", path)
+    end)
+  end
+
   test "validates primary JSON responses against openapi schemas" do
     create_org_conn =
       json_request(:post, "/api/v1/organizations", %{

@@ -16,6 +16,17 @@ defmodule ReportForge.OpenApiContract do
              Enum.join(errors, "\n")
   end
 
+  def assert_operation_has_4xx!(method, path_template) do
+    responses =
+      contract()
+      |> get_in(["paths", path_template, method, "responses"])
+
+    assert is_map(responses), "missing OpenAPI responses for #{method} #{path_template}"
+
+    assert Enum.any?(Map.keys(responses), &String.starts_with?(&1, "4")),
+           "operation #{method} #{path_template} must declare at least one 4XX response"
+  end
+
   defp contract do
     @repo_root
     |> Path.join("openapi.yaml")
