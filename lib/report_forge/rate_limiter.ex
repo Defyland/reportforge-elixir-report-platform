@@ -4,6 +4,7 @@ defmodule ReportForge.RateLimiter do
   use GenServer
 
   @table __MODULE__
+  @admission_timeout_ms 5_000
   @default_max_buckets 50_000
   @prune_interval_ms 60_000
 
@@ -34,6 +35,11 @@ defmodule ReportForge.RateLimiter do
     {:noreply, state}
   end
 
+  @impl GenServer
+  def handle_call({:admit_bucket, key, reset_at}, _from, state) do
+    {:reply, admit_bucket(key, reset_at), state}
+  end
+
   def reset! do
     if table_ready?() do
       :ets.delete_all_objects(@table)
@@ -47,16 +53,17 @@ defmodule ReportForge.RateLimiter do
 
     now = System.system_time(:second)
     key = {bucket, window_seconds}
+    next_reset_at = now + window_seconds
 
-    with :ok <- enforce_capacity(key) do
-      allow_in_window(key, bucket, limit, now, now + window_seconds)
+    with :ok <- ensure_bucket_admitted(key, next_reset_at) do
+      allow_in_window(key, bucket, limit, now, next_reset_at)
     end
   end
 
   defp allow_in_window(key, bucket, limit, now, next_reset_at) do
     case :ets.lookup(@table, key) do
       [] ->
-        true = :ets.insert(@table, {key, 0, next_reset_at})
+        :ets.insert_new(@table, {key, 0, next_reset_at})
         increment_bucket(key, bucket, limit)
 
       [{^key, _count, reset_at}] when reset_at <= now ->
@@ -78,30 +85,35 @@ defmodule ReportForge.RateLimiter do
     end
   end
 
-  defp enforce_capacity(key) do
-    if :ets.member(@table, key) do
-      :ok
-    else
-      enforce_new_bucket_capacity()
+  defp ensure_bucket_admitted(key, next_reset_at) do
+    case :ets.lookup(@table, key) do
+      [{^key, _count, _reset_at}] ->
+        :ok
+
+      [] ->
+        GenServer.call(__MODULE__, {:admit_bucket, key, next_reset_at}, @admission_timeout_ms)
     end
   end
 
-  defp enforce_new_bucket_capacity do
+  defp admit_bucket(key, next_reset_at) do
+    if :ets.member(@table, key) do
+      :ok
+    else
+      admit_new_bucket(key, next_reset_at)
+    end
+  end
+
+  defp admit_new_bucket(key, next_reset_at) do
     max_buckets =
       Application.get_env(:report_forge, :rate_limit_max_buckets, @default_max_buckets)
 
-    case :ets.info(@table, :size) do
-      size when is_integer(size) and size < max_buckets ->
-        :ok
+    prune_expired(System.system_time(:second))
 
-      _too_large ->
-        prune_expired(System.system_time(:second))
-
-        if :ets.info(@table, :size) < max_buckets do
-          :ok
-        else
-          {:error, {:rate_limited, "rate limiter capacity exceeded"}}
-        end
+    if :ets.info(@table, :size) < max_buckets do
+      :ets.insert_new(@table, {key, 0, next_reset_at})
+      :ok
+    else
+      {:error, {:rate_limited, "rate limiter capacity exceeded"}}
     end
   end
 
