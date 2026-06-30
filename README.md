@@ -360,3 +360,11 @@ Operational guidance lives in [docs/runbooks/common-issues.md](./docs/runbooks/c
 3. Phase 3: Oban jobs, scheduled reports, cancellation safety, and persistence-backed retries.
 4. Phase 4: richer telemetry metrics, deployment collector integration, and key-rotation workflows.
 5. Phase 5: managed deployment target, read-replica-aware exporters, XLSX/PDF adapters, and multi-file bundle templates.
+
+## License
+
+This repository is published under the MIT License. See
+[LICENSE.txt](LICENSE.txt).
+
+That keeps the report lifecycle, artifact handling patterns, and operational
+guidance reusable for study and internal experimentation.
